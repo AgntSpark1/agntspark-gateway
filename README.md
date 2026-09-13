@@ -50,6 +50,9 @@ rebuild and restart. It also hardens the host:
 - Tenant containers can't reach the cloud metadata server
   (`agntspark-block-metadata.service` drops 169.254.169.254 in
   `DOCKER-USER`); run the VM without a cloud service account anyway.
+  On GCE that address is also the VPC DNS resolver, so `daemon.json`
+  points containers at public resolvers instead — without it, no
+  container can resolve anything.
 - Postgres/Redis sit on an internal `platform` network; agents only join
   `agntspark-net`.
 - `/metrics` is 404 at the edge.

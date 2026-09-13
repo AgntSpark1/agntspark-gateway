@@ -1,5 +1,6 @@
 {
   "ip": "127.0.0.1",
+  "dns": ["8.8.8.8", "1.1.1.1"],
   "log-driver": "json-file",
   "log-opts": {
     "max-size": "10m",
