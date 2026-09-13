@@ -15,7 +15,7 @@ health-checks and auto-scales running agents.
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
+docker compose up -d postgres redis
 pip install -e ".[dev]"
 alembic upgrade head
 uvicorn agntspark_gateway.main:app --reload
@@ -26,6 +26,11 @@ network (`docker network create agntspark-net`) — `docker compose up`
 creates both automatically for the containerized gateway; running the
 gateway directly on the host needs a Docker socket the current user can
 reach (`unix:///var/run/docker.sock` by default).
+
+`docker compose up` (no service names) also brings up Prometheus
+(`:9090`) and Grafana (`:3000`, anonymous viewer access, Prometheus
+datasource pre-provisioned) alongside Postgres/Redis/gateway — see
+Observability below.
 
 ## Endpoints
 
@@ -47,6 +52,7 @@ reach (`unix:///var/run/docker.sock` by default).
 | `GET /v1/agents/{id}/logs/stream` | Bearer | SSE, polls every 2s |
 | `GET /v1/agents/{id}/metrics` | Bearer | live CPU/memory from Docker stats |
 | `GET /v1/agents/{id}/metrics/stream` | Bearer | SSE, polls every `interval`s (min 5) |
+| `GET /metrics` | none | Prometheus scrape endpoint (platform-wide, not per-agent) |
 
 ## Auth model
 
@@ -90,6 +96,49 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
   in `/metrics` are real, live Docker stats. `request_count`/`request_rate`/
   latency percentiles are always 0 — they need an in-path request proxy
   that doesn't exist yet.
+- **Login/register rate limiting**: `security/rate_limit.py` is a
+  Redis-backed fixed-window counter per client IP
+  (`AGNTSPARK_GATEWAY_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`, default 10 per
+  `AGNTSPARK_GATEWAY_LOGIN_RATE_LIMIT_WINDOW_SECONDS`, default 300s).
+  Fails **open** (allows the request) if Redis is unreachable or
+  `AGNTSPARK_GATEWAY_REDIS_URL` is unset — an MVP tradeoff that never
+  blocks legitimate logins over a Redis outage, at the cost of losing
+  brute-force protection during that outage.
+
+## Data layer
+
+- **Postgres** via `pgvector/pgvector:pg16` (drop-in for `postgres:16`,
+  extension pre-built). `alembic/versions/0003_pgvector.py` enables the
+  `vector` extension — no table uses it yet; it's there so an
+  embedding-backed agent-memory/RAG feature doesn't need a database swap
+  later.
+- **Redis** (`docker-compose.yml`) currently backs the login/register rate
+  limiter above. `agntspark_core.config.MemoryConfig` (per-agent
+  conversation history) also defaults to a `redis_url` — the gateway
+  doesn't wire that up itself; an agent template that wants it connects
+  directly using whatever `REDIS_URL`-style env var you inject via
+  `DeployConfig.env`.
+
+## Observability
+
+- **`GET /metrics`**: Prometheus exposition format, backed by
+  `agntspark_core.metrics` — the same registry `AgentRuntime` already
+  updates on every deploy/scale/health-check
+  (`agntspark_containers_active`, `_container_cpu_percent`,
+  `_container_memory_mb`, `_agents_total`, ...). Real numbers reflecting
+  what this gateway process is actually doing, not a separate/fake source.
+- **Prometheus + Grafana** (`docker-compose.yml`, `observability/`):
+  Prometheus scrapes the gateway's `/metrics` every 15s
+  (`observability/prometheus.yml`); Grafana comes up with that Prometheus
+  pre-provisioned as its default datasource
+  (`observability/grafana-datasource.yml`) and anonymous viewer access
+  for local dev — no dashboards are pre-built yet, build them in the
+  Grafana UI against the `agntspark_*` metric names above.
+- **Deliberately not built**: Jaeger (distributed tracing) and an ELK/log-
+  aggregation stack. There's one service to trace today (no inter-service
+  request chains yet) and Docker's own log buffer plus `/logs` already
+  covers debugging at this scale — revisit both once there's an actual
+  multi-hop request path or log volume that outgrows `docker logs`.
 
 ## Known follow-ups (not in this slice)
 
@@ -99,8 +148,8 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
 2. No path to create the first `ADMIN` user yet (`register` always issues
    `VIEWER`) — needs a seed script or manual DB update before team-management
    work starts.
-3. Redis, multi-project scoping (`X-AgntSpark-Project`), and refresh tokens
-   are reserved (config fields exist) but not implemented.
+3. Multi-project scoping (`X-AgntSpark-Project`) and refresh tokens are
+   reserved (config fields exist) but not implemented.
 4. No per-agent public ingress/routing — `AgentResponse.url` is always
    `null`. Reaching a deployed agent today means exec-ing into Docker
    directly; a real ingress is Phase 3-shaped work.

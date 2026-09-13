@@ -20,6 +20,7 @@ from .exceptions import (
     EmailAlreadyRegisteredError,
     NotFoundError,
     NotImplementedStubError,
+    RateLimitExceededError,
 )
 
 _STATUS_MAP: dict[type[AgntSparkError], int] = {
@@ -28,6 +29,7 @@ _STATUS_MAP: dict[type[AgntSparkError], int] = {
     NotFoundError: status.HTTP_404_NOT_FOUND,
     ApiKeyNotFoundError: status.HTTP_404_NOT_FOUND,
     EmailAlreadyRegisteredError: status.HTTP_409_CONFLICT,
+    RateLimitExceededError: status.HTTP_429_TOO_MANY_REQUESTS,
     NotImplementedStubError: status.HTTP_501_NOT_IMPLEMENTED,
     BuildNotSupportedError: status.HTTP_501_NOT_IMPLEMENTED,
     DeploymentFailedError: status.HTTP_502_BAD_GATEWAY,

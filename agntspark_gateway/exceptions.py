@@ -74,6 +74,17 @@ class BuildNotSupportedError(AgntSparkError):
         )
 
 
+class RateLimitExceededError(AgntSparkError):
+    """Raised when a caller exceeds a Redis-backed rate limit (e.g. login attempts)."""
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__(
+            "Too many attempts. Please try again later.",
+            code="RATE_LIMIT_EXCEEDED",
+            details={"retry_after": retry_after},
+        )
+
+
 class DeploymentFailedError(AgntSparkError):
     """Raised when the underlying container runtime fails to deploy/scale an agent."""
 
@@ -93,6 +104,7 @@ __all__ = [
     "NotFoundError",
     "ApiKeyNotFoundError",
     "AgentNotFoundError",
+    "RateLimitExceededError",
     "NotImplementedStubError",
     "BuildNotSupportedError",
     "DeploymentFailedError",

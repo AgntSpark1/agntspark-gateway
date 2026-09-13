@@ -12,6 +12,7 @@ from ..roles import role_to_str
 from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
 from ..security.dependencies import Principal, get_current_principal
 from ..security.jwt import create_access_token
+from ..security.rate_limit import enforce_login_rate_limit
 from ..services.auth_service import authenticate_user, register_user
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -35,13 +36,20 @@ def _token_response(user: User) -> TokenResponse:
     )
 
 
-@router.post("/register", response_model=TokenResponse, status_code=201)
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=201,
+    dependencies=[Depends(enforce_login_rate_limit)],
+)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     user = await register_user(db, email=body.email, password=body.password, name=body.name)
     return _token_response(user)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login", response_model=TokenResponse, dependencies=[Depends(enforce_login_rate_limit)]
+)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     user = await authenticate_user(db, email=body.email, password=body.password)
     return _token_response(user)

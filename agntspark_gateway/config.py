@@ -37,6 +37,8 @@ class GatewaySettings(BaseSettings):
     docker_image: str = "agntspark/agent-runtime:latest"
     docker_network: str = "agntspark-net"
     scheduler_interval_seconds: int = 30
+    login_rate_limit_max_attempts: int = 10
+    login_rate_limit_window_seconds: int = 300
     # Fernet key (44-char urlsafe-base64) for encrypting secret env vars at
     # rest. Generate a real one for production with:
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
