@@ -1,4 +1,5 @@
+from .agent import Agent
 from .api_key import ApiKey
 from .user import User
 
-__all__ = ["User", "ApiKey"]
+__all__ = ["User", "ApiKey", "Agent"]

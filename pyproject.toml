@@ -23,6 +23,9 @@ dependencies = [
     "alembic>=1.13.0",
     "bcrypt>=4.1.0",
     "pyjwt>=2.9.0",
+    "cryptography>=42.0.0",
+    "docker>=7.1.0",
+    "sse-starlette>=2.1.0",
     "structlog>=24.4.0",
     "agntspark-core @ git+https://github.com/AgntSpark1/agntspark-core.git@main",
 ]
@@ -84,6 +87,7 @@ known-first-party = ["agntspark_gateway"]
 
 [tool.mypy]
 python_version = "3.11"
+plugins = ["pydantic.mypy"]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

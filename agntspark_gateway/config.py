@@ -32,6 +32,16 @@ class GatewaySettings(BaseSettings):
     log_level: str = "INFO"
     environment: str = "development"
 
+    # Agent Runtime / Control Plane
+    docker_socket: str = "unix:///var/run/docker.sock"
+    docker_image: str = "agntspark/agent-runtime:latest"
+    docker_network: str = "agntspark-net"
+    scheduler_interval_seconds: int = 30
+    # Fernet key (44-char urlsafe-base64) for encrypting secret env vars at
+    # rest. Generate a real one for production with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    secret_encryption_key: str = "Jyw3CWB_wTCDeOw8q_dNNJin6tfrQLnltmnRf0UB2T0="
+
 
 settings = GatewaySettings()
 

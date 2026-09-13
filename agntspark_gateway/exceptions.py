@@ -39,14 +39,49 @@ class ApiKeyNotFoundError(NotFoundError):
         super().__init__("API key", details={"key_id": key_id})
 
 
+class AgentNotFoundError(NotFoundError):
+    """Raised when an agent id does not exist or does not belong to the caller."""
+
+    def __init__(self, agent_id: str) -> None:
+        super().__init__("Agent", details={"agent_id": agent_id})
+
+
 class NotImplementedStubError(AgntSparkError):
-    """Raised by reserved-but-unbuilt routes (e.g. /v1/agents/*)."""
+    """Raised by reserved-but-unbuilt routes."""
 
     def __init__(self, path: str) -> None:
         super().__init__(
             f"{path!r} is reserved by the API contract but not implemented yet.",
             code="NOT_IMPLEMENTED",
             details={"path": path},
+        )
+
+
+class BuildNotSupportedError(AgntSparkError):
+    """Raised when a deploy request supplies only build_path (no pre-built image).
+
+    There is no build-from-source pipeline yet — deploys must reference a
+    pre-built container image, or omit `image` entirely to use the
+    platform's default generic agent-runtime image.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Deploying from build_path is not supported yet — provide a pre-built "
+            "'image', or omit both 'image' and 'build_path' to use the platform's "
+            "default runtime image.",
+            code="BUILD_NOT_SUPPORTED",
+        )
+
+
+class DeploymentFailedError(AgntSparkError):
+    """Raised when the underlying container runtime fails to deploy/scale an agent."""
+
+    def __init__(self, agent_id: str, reason: str) -> None:
+        super().__init__(
+            f"Deployment failed for agent {agent_id!r}: {reason}",
+            code="DEPLOYMENT_FAILED",
+            details={"agent_id": agent_id, "reason": reason},
         )
 
 
@@ -57,5 +92,8 @@ __all__ = [
     "EmailAlreadyRegisteredError",
     "NotFoundError",
     "ApiKeyNotFoundError",
+    "AgentNotFoundError",
     "NotImplementedStubError",
+    "BuildNotSupportedError",
+    "DeploymentFailedError",
 ]

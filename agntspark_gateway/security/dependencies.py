@@ -9,7 +9,9 @@ never valid JWTs and vice versa by construction.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from agntspark_core.auth import Role
 from fastapi import Depends, Security
@@ -102,7 +104,7 @@ async def require_jwt_principal(
     return await _authenticate_jwt(token, db)
 
 
-def require_role(minimum: Role):  # noqa: ANN201 — FastAPI dependency factory
+def require_role(minimum: Role) -> Callable[..., Any]:
     """Return a FastAPI dependency that enforces a minimum role."""
 
     async def _check(principal: Principal = Depends(get_current_principal)) -> Principal:

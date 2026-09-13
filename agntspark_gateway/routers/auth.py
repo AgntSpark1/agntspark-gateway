@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..exceptions import AuthenticationError
 from ..models.user import User
 from ..roles import role_to_str
 from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
@@ -52,4 +53,8 @@ async def me(
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     user = await db.get(User, principal.user_id)
+    if user is None:
+        # The account backing an already-validated token was deleted
+        # between authentication and this lookup — vanishingly rare.
+        raise AuthenticationError("Invalid or expired token.")
     return _user_out(user)

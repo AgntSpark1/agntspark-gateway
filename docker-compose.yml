@@ -21,11 +21,24 @@ services:
     environment:
       AGNTSPARK_GATEWAY_DATABASE_URL: postgresql+asyncpg://agntspark:agntspark@postgres:5432/agntspark_gateway
       AGNTSPARK_GATEWAY_JWT_SECRET: dev-secret-change-me
+      # The gateway launches agent containers as *siblings* on the host's
+      # Docker daemon (not nested inside itself) — hence mounting the host
+      # socket below rather than running a Docker-in-Docker setup.
+      AGNTSPARK_GATEWAY_DOCKER_SOCKET: unix:///var/run/docker.sock
+      AGNTSPARK_GATEWAY_DOCKER_NETWORK: agntspark-net
     ports:
       - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - agntspark-net
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   agntspark_gateway_pgdata:
+
+networks:
+  agntspark-net:
+    name: agntspark-net

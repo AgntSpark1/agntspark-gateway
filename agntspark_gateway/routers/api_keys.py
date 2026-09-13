@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..exceptions import AuthenticationError
 from ..models.api_key import ApiKey
 from ..models.user import User
 from ..schemas.api_keys import ApiKeyCreateRequest, ApiKeyCreateResponse, ApiKeyOut
@@ -35,6 +36,8 @@ async def create_key(
     db: AsyncSession = Depends(get_db),
 ) -> ApiKeyCreateResponse:
     user = await db.get(User, principal.user_id)
+    if user is None:
+        raise AuthenticationError("Invalid or expired token.")
     key, raw_key = await create_api_key(db, user=user, label=body.label, scopes=body.scopes)
     return ApiKeyCreateResponse(**_key_out(key).model_dump(), key=raw_key)
 

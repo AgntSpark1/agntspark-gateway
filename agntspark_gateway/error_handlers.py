@@ -15,6 +15,8 @@ from fastapi.responses import JSONResponse
 
 from .exceptions import (
     ApiKeyNotFoundError,
+    BuildNotSupportedError,
+    DeploymentFailedError,
     EmailAlreadyRegisteredError,
     NotFoundError,
     NotImplementedStubError,
@@ -27,6 +29,8 @@ _STATUS_MAP: dict[type[AgntSparkError], int] = {
     ApiKeyNotFoundError: status.HTTP_404_NOT_FOUND,
     EmailAlreadyRegisteredError: status.HTTP_409_CONFLICT,
     NotImplementedStubError: status.HTTP_501_NOT_IMPLEMENTED,
+    BuildNotSupportedError: status.HTTP_501_NOT_IMPLEMENTED,
+    DeploymentFailedError: status.HTTP_502_BAD_GATEWAY,
 }
 
 
@@ -34,7 +38,9 @@ def _status_for(exc: AgntSparkError) -> int:
     for exc_type, code in _STATUS_MAP.items():
         if isinstance(exc, exc_type):
             return code
-    return status.HTTP_400_BAD_REQUEST
+    # An AgntSparkError with no explicit mapping is treated as an internal
+    # failure (e.g. SecretDecryptionError) rather than a client error.
+    return status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 async def agntspark_error_handler(request: Request, exc: AgntSparkError) -> JSONResponse:

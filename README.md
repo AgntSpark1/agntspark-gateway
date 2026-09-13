@@ -1,15 +1,15 @@
 # agntspark-gateway
 
-API Gateway + Auth service for the AgntSpark AI Agent hosting platform.
+API Gateway + Auth + Control Plane for the AgntSpark AI Agent hosting platform.
 
 This service implements the REST API contract already assumed by
 [`agntspark-sdk`](../agntspark-sdk) and [`agntspark-console`](../agntspark-console):
 `Authorization: Bearer <token>` auth (accepting either a JWT session token or
-a long-lived API key), served under `/v1`.
-
-**Current scope**: user registration/login + API key management only.
-`/v1/agents/*` routes exist as reserved stubs (return `501`) — real Agent
-CRUD/deploy/scale/logs logic is a separate future task (Agent Runtime).
+a long-lived API key), served under `/v1`. It's also the Control Plane: it
+owns agent identity/config in Postgres, drives
+[`agntspark-core`](../agntspark-core)'s Docker-backed `AgentRuntime` to
+actually deploy/scale/stop containers, and runs a background scheduler that
+health-checks and auto-scales running agents.
 
 ## Quick start
 
@@ -21,6 +21,12 @@ alembic upgrade head
 uvicorn agntspark_gateway.main:app --reload
 ```
 
+Deploying agents requires a local Docker daemon and the `agntspark-net`
+network (`docker network create agntspark-net`) — `docker compose up`
+creates both automatically for the containerized gateway; running the
+gateway directly on the host needs a Docker socket the current user can
+reach (`unix:///var/run/docker.sock` by default).
+
 ## Endpoints
 
 | Method & path | Auth | Notes |
@@ -31,7 +37,16 @@ uvicorn agntspark_gateway.main:app --reload
 | `POST /v1/api-keys` | JWT only | mint a new API key (raw value shown once) |
 | `GET /v1/api-keys` | Bearer | list caller's own keys |
 | `DELETE /v1/api-keys/{id}` | Bearer | revoke a key |
-| `ANY /v1/agents...` | Bearer | `501` placeholder (auth still enforced) |
+| `POST /v1/agents` | Bearer | create (+ deploy immediately if `deploy` is given) |
+| `GET /v1/agents` | Bearer | list caller's own agents (filter by `status`/`tag`) |
+| `GET /v1/agents/{id}` | Bearer | get one |
+| `DELETE /v1/agents/{id}` | Bearer | stop + remove containers, delete the record |
+| `POST /v1/agents/{id}/deploy` | Bearer | (re)deploy, optionally with a new `DeployConfig` |
+| `POST /v1/agents/{id}/scale` | Bearer | manual scale up/down |
+| `GET /v1/agents/{id}/logs` | Bearer | recent container logs (tail-based) |
+| `GET /v1/agents/{id}/logs/stream` | Bearer | SSE, polls every 2s |
+| `GET /v1/agents/{id}/metrics` | Bearer | live CPU/memory from Docker stats |
+| `GET /v1/agents/{id}/metrics/stream` | Bearer | SSE, polls every `interval`s (min 5) |
 
 ## Auth model
 
@@ -45,6 +60,37 @@ uvicorn agntspark_gateway.main:app --reload
 See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"/"admin"`
 (console) string mapping.
 
+## Agent Runtime / Control Plane
+
+- `agntspark_gateway/runtime.py` bridges async request handlers to
+  `agntspark_core.runtime.AgentRuntime`'s blocking docker-py calls via
+  `asyncio.to_thread`. One `AgentRuntime` instance lives on `app.state` for
+  the process's lifetime and is reconciled against live Docker state at
+  startup (`runtime.reconcile()`), so a gateway restart doesn't orphan
+  already-deployed agents.
+- `agntspark_gateway/scheduler.py` runs a background loop
+  (`AGNTSPARK_GATEWAY_SCHEDULER_INTERVAL_SECONDS`, default 30s) that
+  health-checks every active agent, syncs its DB status/replica count from
+  live Docker state, and evaluates auto-scaling for agents with
+  `auto_scale: true`.
+- **Secrets**: `DeployConfig.env` entries with `secret: true` are
+  Fernet-encrypted (`security/secrets.py`) before being stored in the
+  `agents` table and only decrypted right before container injection —
+  this is the MVP's "secret store." Generate a real production key with
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+  and set `AGNTSPARK_GATEWAY_SECRET_ENCRYPTION_KEY`.
+- **Single-host, Docker-only.** `AgentRuntime` tracks containers in-memory
+  on one Docker host — this matches the platform's current Oracle Cloud A1
+  Flex single/few-node target. Kubernetes support (the docs' "K8s Pod
+  Manager") is future work, not implemented here or in agntspark-core.
+- **No build pipeline.** Deploys need a pre-built `image` (or omit both
+  `image`/`build_path` to use the platform's default generic runtime
+  image). Supplying only `build_path` returns `501 BUILD_NOT_SUPPORTED`.
+- **Metrics are partial by design.** `cpu_percent`/`memory_mb`/`replicas`
+  in `/metrics` are real, live Docker stats. `request_count`/`request_rate`/
+  latency percentiles are always 0 — they need an in-path request proxy
+  that doesn't exist yet.
+
 ## Known follow-ups (not in this slice)
 
 1. `agntspark-console`'s dev proxy forwards `/api/*`; this gateway serves bare
@@ -55,3 +101,11 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
    work starts.
 3. Redis, multi-project scoping (`X-AgntSpark-Project`), and refresh tokens
    are reserved (config fields exist) but not implemented.
+4. No per-agent public ingress/routing — `AgentResponse.url` is always
+   `null`. Reaching a deployed agent today means exec-ing into Docker
+   directly; a real ingress is Phase 3-shaped work.
+5. Request-level metrics (`request_count`, latency percentiles) need an
+   in-path proxy — not built yet, see above.
+6. Log/metric streaming is poll-based (every 2s / `interval`s), not a true
+   push from Docker's log-follow API — simpler, sufficient for the current
+   scale, revisit if polling overhead becomes real.
