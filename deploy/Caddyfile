@@ -31,8 +31,12 @@
 
 	# Prometheus exposition is for internal scraping only — it leaks container
 	# IDs and platform-wide counts, so never serve it publicly.
+	# Must be a handle: a bare `respond` sorts after `handle` in Caddy's
+	# directive order, so the SPA catch-all below would swallow it.
 	@internal path /metrics /metrics/*
-	respond @internal 404
+	handle @internal {
+		respond 404
+	}
 
 	handle /v1/* {
 		import gateway
