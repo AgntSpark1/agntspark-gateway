@@ -28,6 +28,9 @@ class Agent(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
+    # DNS-safe public hostname label (<slug>.<agent_base_domain>). The id can't
+    # serve: it's mixed-case and contains "_", neither of which survive DNS.
+    slug: Mapped[str] = mapped_column(String(63), nullable=False, unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     runtime: Mapped[str] = mapped_column(String(32), nullable=False, default="python3.12")
     framework: Mapped[str] = mapped_column(String(32), nullable=False, default="custom")

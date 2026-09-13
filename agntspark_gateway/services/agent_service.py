@@ -9,7 +9,9 @@ running*.
 
 from __future__ import annotations
 
+import re
 import secrets
+import string
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -21,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import runtime as rt
+from ..config import settings
 from ..exceptions import AgentNotFoundError, BuildNotSupportedError, DeploymentFailedError
 from ..models.agent import Agent
 from ..schemas.agents import (
@@ -39,6 +42,27 @@ _SECRET_MASK = "***"
 
 def _new_agent_id() -> str:
     return f"agt_{secrets.token_urlsafe(15)}"
+
+
+_SLUG_SUFFIX_ALPHABET = string.ascii_lowercase + string.digits
+
+
+def _new_slug(name: str) -> str:
+    """``<name-ish>-<6 random chars>``, always a valid DNS label (<= 47 chars).
+
+    The random suffix keeps two agents with the same name apart and makes
+    hostnames unguessable from the name alone; names with no ASCII
+    letters/digits (e.g. Chinese) fall back to ``agent``.
+    """
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40].strip("-") or "agent"
+    suffix = "".join(secrets.choice(_SLUG_SUFFIX_ALPHABET) for _ in range(6))
+    return f"{base}-{suffix}"
+
+
+def _public_url(agent: Agent) -> str | None:
+    if not settings.agent_base_domain:
+        return None
+    return f"https://{agent.slug}.{settings.agent_base_domain}"
 
 
 def _env_to_storage(env: list[EnvVar]) -> list[dict[str, Any]]:
@@ -129,7 +153,7 @@ def to_agent_response(agent: Agent) -> AgentResponse:
         status=agent.status,
         created_at=agent.created_at,
         updated_at=agent.updated_at,
-        url=agent.url,
+        url=_public_url(agent),
         deploy=_deploy_config_from_agent(agent) if has_deploy_config else None,
         tags=agent.tags,
         metadata=agent.agent_metadata,
@@ -144,6 +168,7 @@ async def create_agent(
 ) -> Agent:
     agent = Agent(
         id=_new_agent_id(),
+        slug=_new_slug(body.name),
         user_id=user_id,
         name=body.name,
         runtime=body.runtime.value,

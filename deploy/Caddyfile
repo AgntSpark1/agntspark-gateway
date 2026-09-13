@@ -1,4 +1,10 @@
 {
+	# Agent hostnames get certificates one at a time on first visit, and only
+	# after the gateway confirms the hostname belongs to a real agent.
+	on_demand_tls {
+		ask http://gateway:8080/internal/ingress/tls-ask
+	}
+
 	servers {
 		# The public hostname is proxied through Cloudflare. Only trust the
 		# client IP it reports when the connection really comes from a
@@ -51,5 +57,32 @@
 		root * /srv/console
 		try_files {path} /index.html
 		file_server
+	}
+}
+
+# Per-agent ingress: <slug>.{$AGENT_DOMAIN} → one of that agent's containers.
+*.{$AGENT_DOMAIN} {
+	tls {
+		on_demand
+	}
+
+	route {
+		# Visitors must never pick the upstream or impersonate the edge.
+		request_header -X-Agnt-Upstream
+		request_header -X-Agnt-Internal-Token
+
+		# The gateway maps the hostname to a container address; any non-2xx
+		# (unknown agent 404, not running 503) goes straight back to the visitor.
+		forward_auth gateway:8080 {
+			uri /internal/ingress/route
+			header_up X-Agnt-Host {host}
+			header_up X-Agnt-Internal-Token {$INGRESS_TOKEN}
+			copy_headers X-Agnt-Upstream
+		}
+
+		reverse_proxy {header.X-Agnt-Upstream} {
+			header_up -X-Agnt-Upstream
+			header_up X-Forwarded-For {client_ip}
+		}
 	}
 }

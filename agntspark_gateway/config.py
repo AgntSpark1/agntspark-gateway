@@ -36,6 +36,12 @@ class GatewaySettings(BaseSettings):
     docker_socket: str = "unix:///var/run/docker.sock"
     docker_image: str = "agntspark/agent-runtime:latest"
     docker_network: str = "agntspark-net"
+    # Public ingress for deployed agents: https://<slug>.<agent_base_domain>.
+    # Unset disables it (AgentResponse.url stays null).
+    agent_base_domain: str | None = None
+    # Shared secret the edge proxy presents on /internal/ingress/route; unset
+    # rejects every routing lookup.
+    ingress_internal_token: str | None = None
     scheduler_interval_seconds: int = 30
     login_rate_limit_max_attempts: int = 10
     login_rate_limit_window_seconds: int = 300

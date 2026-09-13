@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import runtime as rt
 from .config import settings
 from .error_handlers import register_error_handlers
-from .routers import agents, api_keys, auth, health
+from .routers import agents, api_keys, auth, health, ingress
 from .scheduler import run_scheduler_loop
 
 log = structlog.get_logger(__name__)
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(api_keys.router)
     app.include_router(agents.router)
+    app.include_router(ingress.router)
 
     return app
 

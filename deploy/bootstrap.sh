@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Provision (or update) a single-host AgntSpark production server.
 #
-#   sudo API_DOMAIN=agntapi.agntspark.com bash bootstrap.sh
+#   sudo API_DOMAIN=agntapi.agntspark.com AGENT_DOMAIN=run.agntspark.com bash bootstrap.sh
+#
+# AGENT_DOMAIN needs a wildcard DNS record (*.run.agntspark.com) pointing at
+# this host, DNS-only (not proxied) so on-demand certificates can be issued.
 #
 # Idempotent: safe to re-run to pull new code and restart the stack.
 # Tested on Ubuntu 24.04 LTS (GCE image family ubuntu-2404-lts-amd64).
@@ -12,6 +15,7 @@
 set -euo pipefail
 
 : "${API_DOMAIN:?Set API_DOMAIN, e.g. API_DOMAIN=agntapi.agntspark.com}"
+: "${AGENT_DOMAIN:?Set AGENT_DOMAIN, e.g. AGENT_DOMAIN=run.agntspark.com}"
 BASE=/opt/agntspark
 ENV_FILE="$BASE/.env"
 export DEBIAN_FRONTEND=noninteractive
@@ -59,8 +63,11 @@ if [ ! -f "$ENV_FILE" ]; then
   } > "$ENV_FILE"
   echo "    generated $ENV_FILE"
 fi
-sed -i '/^API_DOMAIN=/d;/^DOCKER_GID=/d' "$ENV_FILE"
+# Secrets introduced after a host was first provisioned: added once, never rotated.
+grep -q '^INGRESS_TOKEN=' "$ENV_FILE" || echo "INGRESS_TOKEN=$(openssl rand -hex 32)" >> "$ENV_FILE"
+sed -i '/^API_DOMAIN=/d;/^AGENT_DOMAIN=/d;/^DOCKER_GID=/d' "$ENV_FILE"
 echo "API_DOMAIN=$API_DOMAIN" >> "$ENV_FILE"
+echo "AGENT_DOMAIN=$AGENT_DOMAIN" >> "$ENV_FILE"
 echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)" >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 

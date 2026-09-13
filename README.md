@@ -39,8 +39,11 @@ Caddy (auto-HTTPS, serves the console SPA and proxies `/v1/*` and
 `/healthz`). On a fresh Ubuntu 24.04 VM:
 
 ```bash
-sudo API_DOMAIN=agntapi.agntspark.com bash deploy/bootstrap.sh
+sudo API_DOMAIN=agntapi.agntspark.com AGENT_DOMAIN=run.agntspark.com bash deploy/bootstrap.sh
 ```
+
+`AGENT_DOMAIN` needs a DNS-only (not proxied) wildcard record
+(`*.run.agntspark.com`) pointing at the host — see Agent ingress below.
 
 The script is idempotent — re-run it to pull `main` of both repos,
 rebuild and restart. It also hardens the host:
@@ -60,6 +63,31 @@ rebuild and restart. It also hardens the host:
 Secrets are generated once into `/opt/agntspark/.env` (mode 600). **Back
 up `SECRET_ENCRYPTION_KEY`** — losing it makes every stored agent secret
 unreadable.
+
+## Agent ingress
+
+Every agent gets a stable public URL, `https://<slug>.<agent_base_domain>`
+(`AgentResponse.url`; null when `AGNTSPARK_GATEWAY_AGENT_BASE_DOMAIN` is
+unset). The slug is `<agent-name>-<6 random chars>` because agent ids
+(`agt_…`) are mixed-case with `_` and can't be DNS labels.
+
+Caddy terminates these hostnames (`deploy/Caddyfile`) using two internal,
+non-public gateway endpoints (`routers/ingress.py`):
+
+- `GET /internal/ingress/tls-ask?domain=` — on-demand TLS permission: a
+  certificate is only issued for hostnames of existing agents.
+- `GET /internal/ingress/route` (`forward_auth`, requires
+  `X-Agnt-Internal-Token` = `AGNTSPARK_GATEWAY_INGRESS_INTERNAL_TOKEN`) —
+  maps `X-Agnt-Host` to a random running replica and returns it as
+  `X-Agnt-Upstream: <container-ip>:<deploy.port>`; unknown agent → 404,
+  nothing running → 503, both shown to the visitor.
+
+Traffic goes straight from Caddy to the container over `agntspark-net`;
+the gateway is not on that network. Agents must listen on
+`DeployConfig.port` (default 8080). Each new agent hostname costs one Let's
+Encrypt certificate (50 new certificates per registered domain per week),
+fine for an invite-only Alpha; a wildcard certificate via DNS-01 is the
+scale-up path.
 
 ## Endpoints
 
@@ -183,9 +211,9 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
    work, still not started.
 3. Multi-project scoping (`X-AgntSpark-Project`) and refresh tokens are
    reserved (config fields exist) but not implemented.
-4. No per-agent public ingress/routing — `AgentResponse.url` is always
-   `null`. Reaching a deployed agent today means exec-ing into Docker
-   directly; a real ingress is Phase 3-shaped work.
+4. ~~No per-agent public ingress~~ — see Agent ingress above. Still
+   missing: request-level auth in front of agents (they're public), and
+   custom domains.
 5. Request-level metrics (`request_count`, latency percentiles) need an
    in-path proxy — not built yet, see above.
 6. Log/metric streaming is poll-based (every 2s / `interval`s), not a true

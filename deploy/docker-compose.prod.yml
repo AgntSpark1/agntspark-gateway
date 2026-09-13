@@ -9,8 +9,9 @@
 # Networks:
 #   platform — gateway, postgres, redis, caddy. Agent containers are NOT on it,
 #              so tenant code can't reach the database or Redis.
-#   agents   — named "agntspark-net" (what AgentRuntime attaches containers to);
-#              gateway + caddy join so a future per-agent ingress can proxy in.
+#   agents   — named "agntspark-net" (what AgentRuntime attaches containers to).
+#              Only caddy joins, to proxy <slug>.$AGENT_DOMAIN traffic in; the
+#              gateway stays off it so tenant code can't call it directly.
 
 name: agntspark
 
@@ -59,12 +60,14 @@ services:
       AGNTSPARK_GATEWAY_DOCKER_SOCKET: unix:///var/run/docker.sock
       AGNTSPARK_GATEWAY_DOCKER_NETWORK: agntspark-net
       AGNTSPARK_GATEWAY_CORS_ALLOW_ORIGINS: '["https://${API_DOMAIN}"]'
+      AGNTSPARK_GATEWAY_AGENT_BASE_DOMAIN: ${AGENT_DOMAIN:?AGENT_DOMAIN missing from .env}
+      AGNTSPARK_GATEWAY_INGRESS_INTERNAL_TOKEN: ${INGRESS_TOKEN:?INGRESS_TOKEN missing from .env}
       # Trust X-Forwarded-For from Caddy so the login rate limiter keys on the
       # real client IP instead of the proxy's.
       FORWARDED_ALLOW_IPS: "*"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    networks: [platform, agents]
+    networks: [platform]
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,6 +83,8 @@ services:
       - "0.0.0.0:443:443"
     environment:
       API_DOMAIN: ${API_DOMAIN:?API_DOMAIN missing from .env}
+      AGENT_DOMAIN: ${AGENT_DOMAIN:?AGENT_DOMAIN missing from .env}
+      INGRESS_TOKEN: ${INGRESS_TOKEN:?INGRESS_TOKEN missing from .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /opt/agntspark/agntspark-console/dist:/srv/console:ro
