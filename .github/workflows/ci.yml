@@ -35,7 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # Must match docker-compose.yml's Postgres image — migration 0003
+        # enables the pgvector extension, which plain postgres:16 lacks.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: agntspark
           POSTGRES_PASSWORD: agntspark
