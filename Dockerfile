@@ -29,8 +29,7 @@ COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
 RUN pip install --upgrade pip && \
-    pip install -e "." && \
-    pip cache purge
+    pip install -e "."
 
 RUN useradd -m -u 1000 -s /bin/bash agntspark && \
     chown -R agntspark:agntspark /app
