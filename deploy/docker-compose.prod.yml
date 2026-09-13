@@ -1,0 +1,99 @@
+# Single-host production stack: Caddy (TLS, console, reverse proxy) →
+# gateway → Postgres/Redis, with agent containers spawned as Docker siblings.
+#
+# Run via deploy/bootstrap.sh, which generates /opt/agntspark/.env (secrets)
+# and passes it with --env-file. Nothing here publishes a port except Caddy's
+# 80/443; deploy/daemon.json also defaults every other published port
+# (including agent containers') to 127.0.0.1.
+#
+# Networks:
+#   platform — gateway, postgres, redis, caddy. Agent containers are NOT on it,
+#              so tenant code can't reach the database or Redis.
+#   agents   — named "agntspark-net" (what AgentRuntime attaches containers to);
+#              gateway + caddy join so a future per-agent ingress can proxy in.
+
+name: agntspark
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agntspark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing from .env}
+      POSTGRES_DB: agntspark_gateway
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [platform]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agntspark"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [platform]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  gateway:
+    build:
+      context: ..
+    restart: unless-stopped
+    entrypoint: ["sh", "-c", "alembic upgrade head && exec python -m agntspark_gateway"]
+    # The image runs as uid 1000; it needs the host docker group to use the socket.
+    group_add:
+      - "${DOCKER_GID:?DOCKER_GID missing from .env}"
+    environment:
+      AGNTSPARK_GATEWAY_ENVIRONMENT: production
+      AGNTSPARK_GATEWAY_DATABASE_URL: postgresql+asyncpg://agntspark:${POSTGRES_PASSWORD}@postgres:5432/agntspark_gateway
+      AGNTSPARK_GATEWAY_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET missing from .env}
+      AGNTSPARK_GATEWAY_SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:?SECRET_ENCRYPTION_KEY missing from .env}
+      AGNTSPARK_GATEWAY_REDIS_URL: redis://redis:6379/0
+      AGNTSPARK_GATEWAY_DOCKER_SOCKET: unix:///var/run/docker.sock
+      AGNTSPARK_GATEWAY_DOCKER_NETWORK: agntspark-net
+      AGNTSPARK_GATEWAY_CORS_ALLOW_ORIGINS: '["https://${API_DOMAIN}"]'
+      # Trust X-Forwarded-For from Caddy so the login rate limiter keys on the
+      # real client IP instead of the proxy's.
+      FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [platform, agents]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      # Explicit 0.0.0.0 — daemon.json makes the default bind address 127.0.0.1.
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN missing from .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/agntspark/agntspark-console/dist:/srv/console:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [platform, agents]
+    depends_on: [gateway]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  platform:
+  agents:
+    name: agntspark-net
