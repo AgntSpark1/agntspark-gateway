@@ -63,7 +63,7 @@ asyncio_default_test_loop_scope = "session"
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-src = ["agntspark_gateway", "tests"]
+src = ["agntspark_gateway", "tests", "scripts"]
 
 [tool.ruff.lint]
 # NOTE: deliberately omits "TCH"/"TC" (type-checking-only imports) — with

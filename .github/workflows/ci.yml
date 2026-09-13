@@ -26,10 +26,10 @@ jobs:
           pip install "ruff>=0.7.0"
 
       - name: Lint with ruff
-        run: ruff check agntspark_gateway/ tests/
+        run: ruff check agntspark_gateway/ tests/ scripts/
 
       - name: Format check with ruff
-        run: ruff format --check agntspark_gateway/ tests/
+        run: ruff format --check agntspark_gateway/ tests/ scripts/
 
   test:
     runs-on: ubuntu-latest

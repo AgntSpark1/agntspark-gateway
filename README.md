@@ -145,9 +145,14 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
 1. `agntspark-console`'s dev proxy forwards `/api/*`; this gateway serves bare
    `/v1/*` (matching the SDK). Simplest fix is updating the console's
    `VITE_API_URL` rather than adding an `/api` prefix here.
-2. No path to create the first `ADMIN` user yet (`register` always issues
-   `VIEWER`) — needs a seed script or manual DB update before team-management
-   work starts.
+2. ~~No path to create the first `ADMIN` user~~ — `register` still always
+   issues `VIEWER` by design (no public API should let a caller self-grant
+   elevated privileges), but `scripts/set_user_role.py --email ... --role
+   admin` now does this as a maintenance operation. **Role doesn't gate
+   anything yet** — `require_role()` exists (`security/dependencies.py`)
+   but no route uses it; every `/v1/agents*`/`/v1/api-keys*` check is
+   ownership-only. Wiring real RBAC into those routes is team-management
+   work, still not started.
 3. Multi-project scoping (`X-AgntSpark-Project`) and refresh tokens are
    reserved (config fields exist) but not implemented.
 4. No per-agent public ingress/routing — `AgentResponse.url` is always
