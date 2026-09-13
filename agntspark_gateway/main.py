@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -29,10 +30,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         scheduler_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await scheduler_task
-        except asyncio.CancelledError:
-            pass
 
 
 def create_app() -> FastAPI:
