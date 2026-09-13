@@ -27,6 +27,8 @@ COPY pyproject.toml LICENSE README.md ./
 COPY agntspark_gateway/ ./agntspark_gateway/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
+# Maintenance scripts (e.g. set_user_role.py), run via `docker compose exec gateway`.
+COPY scripts/ ./scripts/
 
 RUN pip install --upgrade pip && \
     pip install -e "."
