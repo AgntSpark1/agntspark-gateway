@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Provision (or update) a single-host AgntSpark production server.
 #
-#   sudo API_DOMAIN=api.agntspark.com bash bootstrap.sh
+#   sudo API_DOMAIN=agntapi.agntspark.com bash bootstrap.sh
 #
 # Idempotent: safe to re-run to pull new code and restart the stack.
 # Tested on Ubuntu 24.04 LTS (GCE image family ubuntu-2404-lts-amd64).
@@ -11,7 +11,7 @@
 # (and backed up) or every stored agent secret becomes unreadable.
 set -euo pipefail
 
-: "${API_DOMAIN:?Set API_DOMAIN, e.g. API_DOMAIN=api.agntspark.com}"
+: "${API_DOMAIN:?Set API_DOMAIN, e.g. API_DOMAIN=agntapi.agntspark.com}"
 BASE=/opt/agntspark
 ENV_FILE="$BASE/.env"
 export DEBIAN_FRONTEND=noninteractive
@@ -65,8 +65,18 @@ echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)" >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 echo "==> Console build"
-docker run --rm -v "$BASE/agntspark-console:/app" -w /app node:20-alpine \
-  sh -c "npm ci --no-audit --no-fund && npm run build"
+# npm ci occasionally dies mid-install ("Exit handler never called") while
+# still exiting 0, leaving node_modules half-populated — so verify the
+# toolchain actually landed and retry instead of trusting the exit code.
+docker run --rm -v "$BASE/agntspark-console:/app" -w /app node:20-alpine sh -c '
+  for attempt in 1 2 3; do
+    rm -rf node_modules
+    npm ci --no-audit --no-fund && [ -x node_modules/.bin/tsc ] && [ -x node_modules/.bin/vite ] && break
+    echo "npm ci attempt $attempt failed, retrying..." >&2
+    [ "$attempt" = 3 ] && exit 1
+    sleep 5
+  done
+  npm run build'
 
 echo "==> Stack"
 cd "$DEPLOY"

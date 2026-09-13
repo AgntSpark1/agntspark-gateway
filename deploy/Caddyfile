@@ -1,3 +1,24 @@
+{
+	servers {
+		# The public hostname is proxied through Cloudflare. Only trust the
+		# client IP it reports when the connection really comes from a
+		# Cloudflare edge (https://www.cloudflare.com/ips/); anyone hitting
+		# the origin IP directly gets their socket address instead.
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP
+		trusted_proxies_strict
+	}
+}
+
+(gateway) {
+	reverse_proxy gateway:8080 {
+		# Hand the gateway exactly one address — the resolved real client —
+		# so its per-IP login rate limit can't be dodged with a forged
+		# X-Forwarded-For chain.
+		header_up X-Forwarded-For {client_ip}
+	}
+}
+
 {$API_DOMAIN} {
 	encode zstd gzip
 
@@ -14,11 +35,11 @@
 	respond @internal 404
 
 	handle /v1/* {
-		reverse_proxy gateway:8080
+		import gateway
 	}
 
 	handle /healthz {
-		reverse_proxy gateway:8080
+		import gateway
 	}
 
 	# Console SPA, same origin as the API (its default base URL is /v1).

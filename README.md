@@ -32,6 +32,32 @@ reach (`unix:///var/run/docker.sock` by default).
 datasource pre-provisioned) alongside Postgres/Redis/gateway — see
 Observability below.
 
+## Production deploy (single host)
+
+`deploy/` holds a one-host production stack: Postgres + Redis + gateway +
+Caddy (auto-HTTPS, serves the console SPA and proxies `/v1/*` and
+`/healthz`). On a fresh Ubuntu 24.04 VM:
+
+```bash
+sudo API_DOMAIN=agntapi.agntspark.com bash deploy/bootstrap.sh
+```
+
+The script is idempotent — re-run it to pull `main` of both repos,
+rebuild and restart. It also hardens the host:
+
+- `ufw` allows only 22/80/443; Docker publishes nothing except Caddy
+  (`daemon.json` binds default port mappings to `127.0.0.1`).
+- Tenant containers can't reach the cloud metadata server
+  (`agntspark-block-metadata.service` drops 169.254.169.254 in
+  `DOCKER-USER`); run the VM without a cloud service account anyway.
+- Postgres/Redis sit on an internal `platform` network; agents only join
+  `agntspark-net`.
+- `/metrics` is 404 at the edge.
+
+Secrets are generated once into `/opt/agntspark/.env` (mode 600). **Back
+up `SECRET_ENCRYPTION_KEY`** — losing it makes every stored agent secret
+unreadable.
+
 ## Endpoints
 
 | Method & path | Auth | Notes |
@@ -52,7 +78,7 @@ Observability below.
 | `GET /v1/agents/{id}/logs/stream` | Bearer | SSE, polls every 2s |
 | `GET /v1/agents/{id}/metrics` | Bearer | live CPU/memory from Docker stats |
 | `GET /v1/agents/{id}/metrics/stream` | Bearer | SSE, polls every `interval`s (min 5) |
-| `GET /metrics` | none | Prometheus scrape endpoint (platform-wide, not per-agent) |
+| `GET /metrics` | none | Prometheus scrape endpoint (platform-wide, not per-agent; blocked at the edge in production) |
 
 ## Auth model
 
@@ -86,8 +112,8 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
   and set `AGNTSPARK_GATEWAY_SECRET_ENCRYPTION_KEY`.
 - **Single-host, Docker-only.** `AgentRuntime` tracks containers in-memory
-  on one Docker host — this matches the platform's current Oracle Cloud A1
-  Flex single/few-node target. Kubernetes support (the docs' "K8s Pod
+  on one Docker host — this matches the current single-VM production
+  target (`deploy/`). Kubernetes support (the docs' "K8s Pod
   Manager") is future work, not implemented here or in agntspark-core.
 - **No build pipeline.** Deploys need a pre-built `image` (or omit both
   `image`/`build_path` to use the platform's default generic runtime
@@ -142,9 +168,8 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
 
 ## Known follow-ups (not in this slice)
 
-1. `agntspark-console`'s dev proxy forwards `/api/*`; this gateway serves bare
-   `/v1/*` (matching the SDK). Simplest fix is updating the console's
-   `VITE_API_URL` rather than adding an `/api` prefix here.
+1. ~~Console `/api` vs gateway `/v1` mismatch~~ — the console now calls
+   `/v1` directly (same origin in production via Caddy).
 2. ~~No path to create the first `ADMIN` user~~ — `register` still always
    issues `VIEWER` by design (no public API should let a caller self-grant
    elevated privileges), but `scripts/set_user_role.py --email ... --role
