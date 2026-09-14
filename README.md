@@ -151,6 +151,12 @@ scale-up path.
   over-quota request returns `403 QUOTA_EXCEEDED` with
   `details.{resource,limit,current,requested}` and changes nothing. Admins
   are exempt; admins set plans via `PATCH /v1/admin/users/{id}`.
+- **Usage metering** (`services/metering_service.py`, table `usage_hours`):
+  every scheduler tick adds running replicas × requested vCPU/memory × the
+  seconds since the previous tick (capped at 3× the interval, so a stalled
+  tick isn't counted as usage) to an hourly bucket per agent.
+  `GET /v1/account/usage` includes this month's replica-, vCPU- and
+  memory-GB-hours under `period`.
 
 See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"/"admin"`
 (console) string mapping.

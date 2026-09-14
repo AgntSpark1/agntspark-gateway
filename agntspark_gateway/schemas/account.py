@@ -27,12 +27,22 @@ class UsageOut(BaseModel):
     memory_mb: int
 
 
+class PeriodUsageOut(BaseModel):
+    """Metered usage since ``start`` (the first of the current month, UTC)."""
+
+    start: datetime
+    replica_hours: float
+    vcpu_hours: float
+    memory_gb_hours: float
+
+
 class AccountUsage(BaseModel):
     plan: str
     # Admins aren't held to plan limits.
     exempt: bool
     limits: PlanLimitsOut
     usage: UsageOut
+    period: PeriodUsageOut
 
 
 class AdminUserOut(BaseModel):

@@ -17,6 +17,8 @@ single-instance deployment target.
 from __future__ import annotations
 
 import asyncio
+import time
+from datetime import UTC, datetime
 
 import structlog
 from agntspark_core.runtime import AgentRuntime
@@ -26,14 +28,20 @@ from . import runtime as rt
 from .config import settings
 from .db import AsyncSessionLocal
 from .models.agent import Agent
-from .services import quota_service
+from .services import metering_service, quota_service
 
 log = structlog.get_logger(__name__)
 
 _ACTIVE_STATUSES = ("running", "scaling", "starting")
 
 
-async def _tick(runtime: AgentRuntime) -> None:
+async def _tick(runtime: AgentRuntime, elapsed_seconds: float | None = None) -> None:
+    # Metered time for this tick: the gap since the previous tick as measured
+    # by the loop, or the configured interval on the first tick.
+    seconds = (
+        elapsed_seconds if elapsed_seconds is not None else settings.scheduler_interval_seconds
+    )
+    now = datetime.now(UTC)
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Agent).where(Agent.status.in_(_ACTIVE_STATUSES)))
         agents = list(result.scalars().all())
@@ -68,6 +76,12 @@ async def _tick(runtime: AgentRuntime) -> None:
             if changed:
                 await db.commit()
 
+            if agent.status in ("running", "scaling") and live_replicas > 0:
+                await metering_service.record(
+                    db, agent=agent, replicas=live_replicas, seconds=seconds, at=now
+                )
+                await db.commit()
+
             if agent.auto_scale and agent.status == "running" and live_replicas > 0:
                 if not await quota_service.has_headroom_for_replica(db, agent):
                     # Auto-scaling never takes an account past its plan.
@@ -79,10 +93,16 @@ async def _tick(runtime: AgentRuntime) -> None:
 
 
 async def run_scheduler_loop(runtime: AgentRuntime) -> None:
-    log.info("Scheduler loop starting", interval_seconds=settings.scheduler_interval_seconds)
+    interval = settings.scheduler_interval_seconds
+    log.info("Scheduler loop starting", interval_seconds=interval)
+    last_tick: float | None = None
     while True:
+        started = time.monotonic()
+        # Capped so a stalled tick isn't metered as a long stretch of usage.
+        elapsed = None if last_tick is None else min(started - last_tick, 3 * interval)
+        last_tick = started
         try:
-            await _tick(runtime)
+            await _tick(runtime, elapsed)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

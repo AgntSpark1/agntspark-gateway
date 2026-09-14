@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from agntspark_gateway.config import settings
 from agntspark_gateway.db import Base
-from agntspark_gateway.models import Agent, ApiKey, Invite, User  # noqa: F401  (registers models on Base.metadata)
+from agntspark_gateway.models import Agent, ApiKey, Invite, UsageHour, User  # noqa: F401  (registers models on Base.metadata)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
