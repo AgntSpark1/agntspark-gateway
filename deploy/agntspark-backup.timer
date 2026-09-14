@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly AgntSpark Postgres backup
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 UTC
+# Run at the next boot if the machine was off at the scheduled time.
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

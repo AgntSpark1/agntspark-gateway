@@ -68,6 +68,10 @@ template, local to the host) and restart. It also hardens the host:
   `net.bridge.bridge-nf-call-iptables=1` first — same-bridge traffic
   otherwise never reaches iptables and the rules silently do nothing.
 - `/metrics` is 404 at the edge.
+- Nightly database backups: `agntspark-backup.timer` runs `deploy/backup.sh`
+  at 03:17 UTC, writing a `pg_dump` archive to `/opt/agntspark/backups`
+  (mode 600, 14 days kept; restore command in the script). They share the
+  VM's disk, so copy them off-host to survive losing the machine.
 
 Secrets are generated once into `/opt/agntspark/.env` (mode 600). **Back
 up `SECRET_ENCRYPTION_KEY`** — losing it makes every stored agent secret

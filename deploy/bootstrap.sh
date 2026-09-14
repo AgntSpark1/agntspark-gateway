@@ -40,10 +40,14 @@ echo "==> Docker daemon hardening"
 install -m 0644 "$DEPLOY/daemon.json" /etc/docker/daemon.json
 install -m 0644 "$DEPLOY/agntspark-block-metadata.service" /etc/systemd/system/agntspark-block-metadata.service
 install -m 0644 "$DEPLOY/agntspark-isolate-agents.service" /etc/systemd/system/agntspark-isolate-agents.service
+install -m 0644 "$DEPLOY/agntspark-backup.service" /etc/systemd/system/agntspark-backup.service
+install -m 0644 "$DEPLOY/agntspark-backup.timer" /etc/systemd/system/agntspark-backup.timer
 systemctl daemon-reload
 systemctl enable docker
 systemctl restart docker
 systemctl enable --now agntspark-block-metadata.service agntspark-isolate-agents.service
+# Nightly pg_dump to /opt/agntspark/backups (deploy/backup.sh).
+systemctl enable --now agntspark-backup.timer
 
 echo "==> Host firewall (22/80/443 only)"
 ufw default deny incoming

@@ -38,6 +38,20 @@ def test_isolation_enables_bridge_netfilter_first() -> None:
     assert unit.index("ExecStartPre=") < unit.index("ExecStart=")
 
 
+def test_backup_timer_is_wired_to_an_installed_script() -> None:
+    service = (DEPLOY / "agntspark-backup.service").read_text()
+    timer = (DEPLOY / "agntspark-backup.timer").read_text()
+    bootstrap = (DEPLOY / "bootstrap.sh").read_text()
+
+    assert "/opt/agntspark/agntspark-gateway/deploy/backup.sh" in service
+    assert (DEPLOY / "backup.sh").is_file()
+    assert "OnCalendar=" in timer
+    assert "Persistent=true" in timer
+    for unit in ("agntspark-backup.service", "agntspark-backup.timer"):
+        assert f'"$DEPLOY/{unit}" /etc/systemd/system/{unit}' in bootstrap
+    assert "systemctl enable --now agntspark-backup.timer" in bootstrap
+
+
 def test_caddy_address_is_the_one_isolation_allows() -> None:
     compose = (DEPLOY / "docker-compose.prod.yml").read_text()
     caddy_ip = re.search(r"ipv4_address:\s*(\S+)", compose)
