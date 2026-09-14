@@ -6,6 +6,11 @@ PartOf=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# Containers on one bridge talk at layer 2, which only passes through iptables
+# once br_netfilter is loaded and bridge-nf-call-iptables is on. Without these
+# two steps the rules below silently match nothing.
+ExecStartPre=/sbin/modprobe br_netfilter
+ExecStartPre=/sbin/sysctl -q -w net.bridge.bridge-nf-call-iptables=1
 # Packets between two containers on the agents bridge are dropped unless one
 # side is Caddy (10.89.0.2, pinned in docker-compose.prod.yml), so tenants can
 # only reach each other through their public URLs. RETURN hands allowed

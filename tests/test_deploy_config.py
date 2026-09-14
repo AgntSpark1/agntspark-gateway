@@ -29,6 +29,15 @@ def test_isolation_rules_and_bootstrap_use_the_same_bridge() -> None:
     assert f'!= "{name}"' in (DEPLOY / "bootstrap.sh").read_text()
 
 
+def test_isolation_enables_bridge_netfilter_first() -> None:
+    # Same-bridge container traffic skips iptables entirely unless this is on;
+    # the first production deploy shipped rules that matched nothing.
+    unit = (DEPLOY / "agntspark-isolate-agents.service").read_text()
+    assert "ExecStartPre=/sbin/modprobe br_netfilter" in unit
+    assert "net.bridge.bridge-nf-call-iptables=1" in unit
+    assert unit.index("ExecStartPre=") < unit.index("ExecStart=")
+
+
 def test_caddy_address_is_the_one_isolation_allows() -> None:
     compose = (DEPLOY / "docker-compose.prod.yml").read_text()
     caddy_ip = re.search(r"ipv4_address:\s*(\S+)", compose)

@@ -64,7 +64,9 @@ template, local to the host) and restart. It also hardens the host:
   (`agnt-agents`, `10.89.0.0/16`) and
   `agntspark-isolate-agents.service` drops container-to-container traffic
   on it except to/from Caddy (`10.89.0.2`). Tenants talk to each other only
-  via public URLs.
+  via public URLs. The unit loads `br_netfilter` and sets
+  `net.bridge.bridge-nf-call-iptables=1` first — same-bridge traffic
+  otherwise never reaches iptables and the rules silently do nothing.
 - `/metrics` is 404 at the edge.
 
 Secrets are generated once into `/opt/agntspark/.env` (mode 600). **Back
