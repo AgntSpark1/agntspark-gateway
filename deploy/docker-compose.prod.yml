@@ -110,8 +110,8 @@ networks:
   agents:
     name: agntspark-net
     driver_opts:
-      # A stable interface name for the isolation rules to match on.
-      com.docker.network.bridge.name: agntspark-agents
+      # A stable interface name for the isolation rules (Linux caps these at 15 chars).
+      com.docker.network.bridge.name: agnt-agents
     ipam:
       config:
         - subnet: 10.89.0.0/16

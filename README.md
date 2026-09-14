@@ -61,7 +61,7 @@ template, local to the host) and restart. It also hardens the host:
 - Postgres/Redis sit on an internal `platform` network; agents only join
   `agntspark-net`.
 - Agents can't reach each other: `agntspark-net` uses a fixed bridge
-  (`agntspark-agents`, `10.89.0.0/16`) and
+  (`agnt-agents`, `10.89.0.0/16`) and
   `agntspark-isolate-agents.service` drops container-to-container traffic
   on it except to/from Caddy (`10.89.0.2`). Tenants talk to each other only
   via public URLs.

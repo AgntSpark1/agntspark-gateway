@@ -103,7 +103,7 @@ cd "$DEPLOY"
 # are reattached once the stack is up.
 RECONNECT_AGENTS=""
 if docker network inspect agntspark-net >/dev/null 2>&1 &&
-  [ "$(docker network inspect -f '{{index .Options "com.docker.network.bridge.name"}}' agntspark-net)" != "agntspark-agents" ]; then
+  [ "$(docker network inspect -f '{{index .Options "com.docker.network.bridge.name"}}' agntspark-net)" != "agnt-agents" ]; then
   echo "    recreating agntspark-net with isolation settings"
   for c in $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' agntspark-net); do
     docker network disconnect -f agntspark-net "$c"
