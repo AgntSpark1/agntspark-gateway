@@ -45,8 +45,10 @@ sudo API_DOMAIN=agntapi.agntspark.com AGENT_DOMAIN=run.agntspark.com bash deploy
 `AGENT_DOMAIN` needs a DNS-only (not proxied) wildcard record
 (`*.run.agntspark.com`) pointing at the host — see Agent ingress below.
 
-The script is idempotent — re-run it to pull `main` of both repos,
-rebuild and restart. It also hardens the host:
+The script is idempotent — re-run it to pull `main` of the gateway,
+console, core and templates repos, rebuild the agent images
+(`agntspark/agent-runtime` plus one `agntspark/template-<name>` per official
+template, local to the host) and restart. It also hardens the host:
 
 - `ufw` allows only 22/80/443; Docker publishes nothing except Caddy
   (`daemon.json` binds default port mappings to `127.0.0.1`).

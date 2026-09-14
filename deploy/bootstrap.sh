@@ -26,7 +26,7 @@ apt-get install -y -q docker.io docker-compose-v2 git ufw openssl curl
 
 echo "==> Code"
 mkdir -p "$BASE"
-for repo in agntspark-gateway agntspark-console; do
+for repo in agntspark-gateway agntspark-console agntspark-core agntspark-templates; do
   if [ -d "$BASE/$repo/.git" ]; then
     git -C "$BASE/$repo" fetch --depth 1 origin main
     git -C "$BASE/$repo" reset --hard origin/main
@@ -84,6 +84,16 @@ docker run --rm -v "$BASE/agntspark-console:/app" -w /app node:20-alpine sh -c '
     sleep 5
   done
   npm run build'
+
+echo "==> Agent images"
+# The default image every agent runs (runtime contract v1) and one image per
+# official template built on top of it. Local to this host; nothing is pushed.
+docker build -q -t agntspark/agent-runtime:latest "$BASE/agntspark-core"
+for dir in "$BASE"/agntspark-templates/templates/*/; do
+  name=$(basename "$dir")
+  docker build -q --build-arg TEMPLATE="$name" -t "agntspark/template-$name:latest" \
+    "$BASE/agntspark-templates"
+done
 
 echo "==> Stack"
 cd "$DEPLOY"
