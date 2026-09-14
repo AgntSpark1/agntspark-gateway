@@ -112,6 +112,9 @@ scale-up path.
 | `POST /v1/admin/invites` | admin | `{note?,max_uses?,expires_in_days?}` → invite (raw `code` shown once) |
 | `GET /v1/admin/invites` | admin | list invites with status (no raw codes) |
 | `DELETE /v1/admin/invites/{id}` | admin | revoke an invite |
+| `GET /v1/admin/users` | admin | users with role, plan, active flag and agent count |
+| `PATCH /v1/admin/users/{id}` | admin | `{role?,plan?,is_active?}` (can't demote/deactivate yourself) |
+| `GET /v1/account/usage` | Bearer | caller's plan, limits and current usage |
 | `POST /v1/agents` | Bearer | create (+ deploy immediately if `deploy` is given) |
 | `GET /v1/agents` | Bearer | list caller's own agents (filter by `status`/`tag`) |
 | `GET /v1/agents/{id}` | Bearer | get one |
@@ -138,6 +141,16 @@ scale-up path.
   consumes one use of an admin-issued `inv_…` code (stored only as SHA-256,
   row-locked, and counted in the same transaction as the new account); every
   bad-code case returns the same `403 INVALID_INVITE`.
+- **Roles are enforced**: new accounts are `developer`; creating, deploying,
+  scaling and deleting agents and minting/revoking API keys need
+  `developer`, `viewer` is read-only, `/v1/admin/*` needs `admin`.
+- **Plan quotas** (`plans.py`, `services/quota_service.py`): each user has a
+  `plan` (`free` or `pro`) limiting agent count, running replicas, total
+  vCPU/memory across running replicas, and per-replica CPU/memory. Checked
+  before create/deploy/scale (and before the scheduler auto-scales), so an
+  over-quota request returns `403 QUOTA_EXCEEDED` with
+  `details.{resource,limit,current,requested}` and changes nothing. Admins
+  are exempt; admins set plans via `PATCH /v1/admin/users/{id}`.
 
 See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"/"admin"`
 (console) string mapping.

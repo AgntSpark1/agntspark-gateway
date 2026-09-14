@@ -38,7 +38,8 @@ async def register_user(
         email=email,
         password_hash=hash_password(password),
         name=name,
-        role=int(Role.VIEWER),
+        # Developers can deploy; viewer is for read-only access granted by an admin.
+        role=int(Role.OPERATOR),
     )
     db.add(user)
     # Commits the invite's use together with the account.

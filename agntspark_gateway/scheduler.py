@@ -26,6 +26,7 @@ from . import runtime as rt
 from .config import settings
 from .db import AsyncSessionLocal
 from .models.agent import Agent
+from .services import quota_service
 
 log = structlog.get_logger(__name__)
 
@@ -68,6 +69,9 @@ async def _tick(runtime: AgentRuntime) -> None:
                 await db.commit()
 
             if agent.auto_scale and agent.status == "running" and live_replicas > 0:
+                if not await quota_service.has_headroom_for_replica(db, agent):
+                    # Auto-scaling never takes an account past its plan.
+                    continue
                 try:
                     await rt.auto_scale(runtime, agent.id)
                 except Exception as exc:

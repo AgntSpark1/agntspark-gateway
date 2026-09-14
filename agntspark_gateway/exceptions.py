@@ -85,6 +85,52 @@ class RateLimitExceededError(AgntSparkError):
         )
 
 
+class QuotaExceededError(AgntSparkError):
+    """Raised when an action would take an account past its plan's limits."""
+
+    _LABELS = {
+        "agents": "agents",
+        "replicas": "running replicas",
+        "vcpu": "vCPUs across running replicas",
+        "memory_mb": "MB of memory across running replicas",
+        "cpu_per_replica": "vCPUs per replica",
+        "memory_mb_per_replica": "MB of memory per replica",
+    }
+
+    def __init__(
+        self,
+        resource: str,
+        *,
+        plan: str,
+        limit: float,
+        requested: float,
+        current: float | None = None,
+    ) -> None:
+        what = self._LABELS.get(resource, resource)
+        if current is None:
+            detail = f"requested {requested:g}"
+        else:
+            detail = f"this would use {current + requested:g}"
+        super().__init__(
+            f"The {plan} plan allows {limit:g} {what}; {detail}.",
+            code="QUOTA_EXCEEDED",
+            details={
+                "resource": resource,
+                "plan": plan,
+                "limit": limit,
+                "current": current,
+                "requested": requested,
+            },
+        )
+
+
+class UserNotFoundError(NotFoundError):
+    """Raised when an admin references a user id that doesn't exist."""
+
+    def __init__(self, user_id: str) -> None:
+        super().__init__("User", details={"user_id": user_id})
+
+
 class RegistrationClosedError(AgntSparkError):
     """Raised on register when registration_mode is "closed"."""
 
@@ -138,4 +184,6 @@ __all__ = [
     "RegistrationClosedError",
     "InvalidInviteError",
     "InviteNotFoundError",
+    "QuotaExceededError",
+    "UserNotFoundError",
 ]

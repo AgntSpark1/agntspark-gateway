@@ -95,7 +95,7 @@ class TestInvites:
         second = await _register(client, "tester2@agntspark.com", invite_code=invite["code"])
 
         assert first.status_code == 201
-        assert first.json()["user"]["role"] == "viewer"
+        assert first.json()["user"]["role"] == "developer"
         assert second.status_code == 403
 
         [listed] = (await client.get("/v1/admin/invites", headers=headers)).json()

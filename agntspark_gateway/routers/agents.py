@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import structlog
+from agntspark_core.auth import Role
 from agntspark_core.runtime import AgentRuntime
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,11 +31,14 @@ from ..schemas.agents import (
     ScaleRequest,
     ScaleResponse,
 )
-from ..security.dependencies import Principal, get_current_principal
+from ..security.dependencies import Principal, get_current_principal, require_role
 from ..services import agent_service
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 log = structlog.get_logger(__name__)
+
+# Viewers can look; changing agents takes the developer role.
+require_developer = require_role(Role.OPERATOR)
 
 
 def get_agent_runtime(request: Request) -> AgentRuntime:
@@ -44,7 +48,7 @@ def get_agent_runtime(request: Request) -> AgentRuntime:
 @router.post("", response_model=AgentResponse, status_code=201)
 async def create_agent(
     body: AgentConfigIn,
-    principal: Principal = Depends(get_current_principal),
+    principal: Principal = Depends(require_developer),
     db: AsyncSession = Depends(get_db),
     runtime: AgentRuntime = Depends(get_agent_runtime),
 ) -> AgentResponse:
@@ -88,7 +92,7 @@ async def get_agent(
 @router.delete("/{agent_id}", status_code=204)
 async def delete_agent(
     agent_id: str,
-    principal: Principal = Depends(get_current_principal),
+    principal: Principal = Depends(require_developer),
     db: AsyncSession = Depends(get_db),
     runtime: AgentRuntime = Depends(get_agent_runtime),
 ) -> None:
@@ -101,7 +105,7 @@ async def delete_agent(
 async def deploy_agent(
     agent_id: str,
     body: DeployConfig | None = None,
-    principal: Principal = Depends(get_current_principal),
+    principal: Principal = Depends(require_developer),
     db: AsyncSession = Depends(get_db),
     runtime: AgentRuntime = Depends(get_agent_runtime),
 ) -> AgentResponse:
@@ -115,7 +119,7 @@ async def deploy_agent(
 async def scale_agent(
     agent_id: str,
     body: ScaleRequest,
-    principal: Principal = Depends(get_current_principal),
+    principal: Principal = Depends(require_developer),
     db: AsyncSession = Depends(get_db),
     runtime: AgentRuntime = Depends(get_agent_runtime),
 ) -> ScaleResponse:

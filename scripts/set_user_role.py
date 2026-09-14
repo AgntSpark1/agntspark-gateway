@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Promote/demote a user's role — the only way to create the first ADMIN.
 
-POST /v1/auth/register always issues Role.VIEWER by design (no public API
-should let a caller self-grant elevated privileges). This maintenance
+POST /v1/auth/register always issues the developer role (Role.OPERATOR) —
+no public API lets a caller self-grant admin. This maintenance
 script is the documented bootstrap path: run it once against the target
 database to create your first ADMIN account after registering normally
 through the API.

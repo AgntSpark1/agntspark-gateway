@@ -21,6 +21,7 @@ from .exceptions import (
     InvalidInviteError,
     NotFoundError,
     NotImplementedStubError,
+    QuotaExceededError,
     RateLimitExceededError,
     RegistrationClosedError,
 )
@@ -29,6 +30,7 @@ _STATUS_MAP: dict[type[AgntSparkError], int] = {
     AuthenticationError: status.HTTP_401_UNAUTHORIZED,
     AuthorisationError: status.HTTP_403_FORBIDDEN,
     InvalidInviteError: status.HTTP_403_FORBIDDEN,
+    QuotaExceededError: status.HTTP_403_FORBIDDEN,
     RegistrationClosedError: status.HTTP_403_FORBIDDEN,
     NotFoundError: status.HTTP_404_NOT_FOUND,
     ApiKeyNotFoundError: status.HTTP_404_NOT_FOUND,
@@ -58,12 +60,20 @@ async def agntspark_error_handler(request: Request, exc: AgntSparkError) -> JSON
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # Only location, message and type: pydantic's raw errors carry "ctx" (the
+    # validator's exception object, which isn't JSON-serializable and made
+    # custom validators return 500) and "input" (which would echo submitted
+    # values such as passwords back to the caller).
+    errors = [
+        {"loc": list(e.get("loc", ())), "msg": e.get("msg", ""), "type": e.get("type", "")}
+        for e in exc.errors()
+    ]
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "code": "VALIDATION_ERROR",
             "message": "Request validation failed.",
-            "details": {"errors": exc.errors()},
+            "details": {"errors": errors},
         },
     )
 

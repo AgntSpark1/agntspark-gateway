@@ -24,7 +24,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=int(Role.VIEWER))
+    role: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=int(Role.OPERATOR))
+    # Key into agntspark_gateway.plans.PLANS.
+    plan: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="free", server_default="free"
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

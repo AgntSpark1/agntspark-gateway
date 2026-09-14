@@ -104,10 +104,14 @@ async def require_jwt_principal(
     return await _authenticate_jwt(token, db)
 
 
-def require_role(minimum: Role) -> Callable[..., Any]:
-    """Return a FastAPI dependency that enforces a minimum role."""
+def require_role(minimum: Role, *, jwt_only: bool = False) -> Callable[..., Any]:
+    """Return a FastAPI dependency that enforces a minimum role.
 
-    async def _check(principal: Principal = Depends(get_current_principal)) -> Principal:
+    ``jwt_only`` additionally rejects API keys (e.g. so a key can't mint keys).
+    """
+    base = require_jwt_principal if jwt_only else get_current_principal
+
+    async def _check(principal: Principal = Depends(base)) -> Principal:
         if not principal.role.can(minimum):
             raise AuthorisationError(str(principal.user_id), f"require_role({minimum.name})")
         return principal

@@ -37,6 +37,7 @@ from ..schemas.agents import (
     ResourceLimits,
 )
 from ..security.secrets import decrypt_secret, encrypt_secret
+from . import quota_service
 
 _SECRET_MASK = "***"
 
@@ -194,6 +195,18 @@ def to_agent_response(agent: Agent) -> AgentResponse:
 async def create_agent(
     db: AsyncSession, *, runtime: AgentRuntime, user_id: uuid.UUID, body: AgentConfigIn
 ) -> Agent:
+    await quota_service.ensure_can_create_agent(db, user_id=user_id)
+    if body.deploy is not None:
+        # Checked before inserting, so an over-quota request leaves no agent behind.
+        await quota_service.ensure_resources(
+            db,
+            user_id=user_id,
+            agent_id=None,
+            replicas=body.deploy.replicas,
+            cpu=body.deploy.resources.cpu,
+            memory_mb=body.deploy.resources.memory_mb,
+        )
+
     agent = Agent(
         id=_new_agent_id(),
         slug=_new_slug(body.name),
@@ -274,6 +287,15 @@ async def deploy_agent(
 ) -> Agent:
     agent = await _get_owned(db, user_id=user_id, agent_id=agent_id)
 
+    await quota_service.ensure_resources(
+        db,
+        user_id=user_id,
+        agent_id=agent.id,
+        replicas=deploy.replicas if deploy is not None else agent.replicas,
+        cpu=deploy.resources.cpu if deploy is not None else agent.cpu,
+        memory_mb=deploy.resources.memory_mb if deploy is not None else agent.memory_mb,
+    )
+
     if deploy is not None:
         _apply_deploy_config(agent, deploy)
         await db.commit()
@@ -333,6 +355,16 @@ async def scale_agent(
 ) -> tuple[Agent, int]:
     agent = await _get_owned(db, user_id=user_id, agent_id=agent_id)
     previous_replicas = agent.replicas
+
+    if direction == "up":
+        await quota_service.ensure_resources(
+            db,
+            user_id=user_id,
+            agent_id=agent.id,
+            replicas=agent.replicas + count,
+            cpu=agent.cpu,
+            memory_mb=agent.memory_mb,
+        )
 
     agent.status = "scaling"
     await db.commit()

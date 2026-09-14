@@ -31,6 +31,7 @@ def _user_out(user: User) -> UserOut:
         name=user.name,
         email=user.email,
         role=role_to_str(user.role_enum),
+        plan=user.plan,
     )
 
 

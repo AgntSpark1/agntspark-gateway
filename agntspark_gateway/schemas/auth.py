@@ -32,6 +32,7 @@ class UserOut(BaseModel):
     name: str
     email: str
     role: str
+    plan: str = "free"
     avatarUrl: str | None = None
 
     @field_serializer("id")
