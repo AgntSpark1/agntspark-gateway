@@ -1,0 +1,19 @@
+[Unit]
+Description=Stop agent containers from reaching each other on the agntspark-agents bridge
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Packets between two containers on the agents bridge are dropped unless one
+# side is Caddy (10.89.0.2, pinned in docker-compose.prod.yml), so tenants can
+# only reach each other through their public URLs. RETURN hands allowed
+# packets back to Docker's own forwarding rules. Each rule is inserted at the
+# top only if missing, in an order that keeps the RETURNs above the DROP.
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -i agntspark-agents -o agntspark-agents -j DROP 2>/dev/null || iptables -I DOCKER-USER -i agntspark-agents -o agntspark-agents -j DROP'
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -i agntspark-agents -o agntspark-agents -d 10.89.0.2 -j RETURN 2>/dev/null || iptables -I DOCKER-USER -i agntspark-agents -o agntspark-agents -d 10.89.0.2 -j RETURN'
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -i agntspark-agents -o agntspark-agents -s 10.89.0.2 -j RETURN 2>/dev/null || iptables -I DOCKER-USER -i agntspark-agents -o agntspark-agents -s 10.89.0.2 -j RETURN'
+
+[Install]
+WantedBy=docker.service

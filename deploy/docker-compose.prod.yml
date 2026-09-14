@@ -92,7 +92,12 @@ services:
       - /opt/agntspark/agntspark-console/dist:/srv/console:ro
       - caddy_data:/data
       - caddy_config:/config
-    networks: [platform, agents]
+    networks:
+      platform:
+      agents:
+        # Pinned: agntspark-isolate-agents.service allows Caddy <-> agent
+        # traffic on this bridge and drops agent <-> agent traffic.
+        ipv4_address: 10.89.0.2
     depends_on: [gateway]
 
 volumes:
@@ -104,3 +109,9 @@ networks:
   platform:
   agents:
     name: agntspark-net
+    driver_opts:
+      # A stable interface name for the isolation rules to match on.
+      com.docker.network.bridge.name: agntspark-agents
+    ipam:
+      config:
+        - subnet: 10.89.0.0/16

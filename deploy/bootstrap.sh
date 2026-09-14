@@ -39,10 +39,11 @@ DEPLOY="$BASE/agntspark-gateway/deploy"
 echo "==> Docker daemon hardening"
 install -m 0644 "$DEPLOY/daemon.json" /etc/docker/daemon.json
 install -m 0644 "$DEPLOY/agntspark-block-metadata.service" /etc/systemd/system/agntspark-block-metadata.service
+install -m 0644 "$DEPLOY/agntspark-isolate-agents.service" /etc/systemd/system/agntspark-isolate-agents.service
 systemctl daemon-reload
 systemctl enable docker
 systemctl restart docker
-systemctl enable --now agntspark-block-metadata.service
+systemctl enable --now agntspark-block-metadata.service agntspark-isolate-agents.service
 
 echo "==> Host firewall (22/80/443 only)"
 ufw default deny incoming
@@ -97,7 +98,27 @@ done
 
 echo "==> Stack"
 cd "$DEPLOY"
+# The agents network needs a fixed bridge name and subnet for the isolation
+# rules; one created by an older deploy is replaced, and its agent containers
+# are reattached once the stack is up.
+RECONNECT_AGENTS=""
+if docker network inspect agntspark-net >/dev/null 2>&1 &&
+  [ "$(docker network inspect -f '{{index .Options "com.docker.network.bridge.name"}}' agntspark-net)" != "agntspark-agents" ]; then
+  echo "    recreating agntspark-net with isolation settings"
+  for c in $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' agntspark-net); do
+    docker network disconnect -f agntspark-net "$c"
+  done
+  docker network rm agntspark-net
+  RECONNECT_AGENTS=1
+fi
 docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml up -d --build --remove-orphans
+if [ -n "$RECONNECT_AGENTS" ]; then
+  for c in $(docker ps -aq --filter label=agntspark.agent_id); do
+    docker network connect agntspark-net "$c"
+  done
+  # Agent IPs changed; the gateway re-reads them from Docker at startup.
+  docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml restart gateway
+fi
 
 echo "==> Waiting for gateway health"
 for _ in $(seq 1 60); do
