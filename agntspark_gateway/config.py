@@ -32,6 +32,13 @@ class GatewaySettings(BaseSettings):
     # Who may create an account: anyone ("open"), only holders of an
     # admin-issued invite code ("invite"), or nobody ("closed").
     registration_mode: Literal["open", "invite", "closed"] = "open"
+
+    # Stripe billing. Leaving the key or the Pro price unset disables it.
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_price_pro: str | None = None
+    # The console's public URL, where Stripe sends people back to.
+    public_base_url: str = "http://localhost:5173"
     cors_allow_origins: list[str] = ["http://localhost:5173"]
     redis_url: str | None = None
     log_level: str = "INFO"

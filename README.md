@@ -161,6 +161,16 @@ scale-up path.
   tick isn't counted as usage) to an hourly bucket per agent.
   `GET /v1/account/usage` includes this month's replica-, vCPU- and
   memory-GB-hours under `period`.
+- **Billing** (`services/billing_service.py`, `routers/billing.py`): Stripe
+  subscriptions for the `pro` plan. `POST /v1/billing/checkout` returns a
+  Stripe Checkout URL (creating the Stripe customer once),
+  `POST /v1/billing/portal` a customer-portal URL, and
+  `POST /v1/billing/webhook` (signature-verified) keeps `users.plan` in sync:
+  `active`/`trialing`/`past_due` → `pro`, anything else → `free`. Disabled
+  (503 `BILLING_NOT_CONFIGURED`, `GET /v1/billing` → `enabled: false`) until
+  `AGNTSPARK_GATEWAY_STRIPE_SECRET_KEY` and `..._STRIPE_PRICE_PRO` are set;
+  the webhook also needs `..._STRIPE_WEBHOOK_SECRET`. Downgrading doesn't stop
+  running agents — quotas only refuse new work.
 
 See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"/"admin"`
 (console) string mapping.

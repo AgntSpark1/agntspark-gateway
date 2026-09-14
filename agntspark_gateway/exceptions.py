@@ -124,6 +124,27 @@ class QuotaExceededError(AgntSparkError):
         )
 
 
+class BillingNotConfiguredError(AgntSparkError):
+    """Raised when a billing action is attempted but Stripe isn't configured."""
+
+    def __init__(self) -> None:
+        super().__init__("Billing isn't enabled on this server.", code="BILLING_NOT_CONFIGURED")
+
+
+class BillingConflictError(AgntSparkError):
+    """Raised for billing actions that don't fit the account's current state."""
+
+    def __init__(self, message: str, *, code: str) -> None:
+        super().__init__(message, code=code)
+
+
+class InvalidWebhookError(AgntSparkError):
+    """Raised when a Stripe webhook's signature doesn't verify."""
+
+    def __init__(self) -> None:
+        super().__init__("Invalid webhook signature.", code="INVALID_WEBHOOK_SIGNATURE")
+
+
 class UserNotFoundError(NotFoundError):
     """Raised when an admin references a user id that doesn't exist."""
 
@@ -186,4 +207,7 @@ __all__ = [
     "InviteNotFoundError",
     "QuotaExceededError",
     "UserNotFoundError",
+    "BillingNotConfiguredError",
+    "BillingConflictError",
+    "InvalidWebhookError",
 ]

@@ -64,6 +64,11 @@ services:
       AGNTSPARK_GATEWAY_INGRESS_INTERNAL_TOKEN: ${INGRESS_TOKEN:?INGRESS_TOKEN missing from .env}
       # Private alpha: accounts need an admin-issued invite code.
       AGNTSPARK_GATEWAY_REGISTRATION_MODE: ${REGISTRATION_MODE:-invite}
+      # Stripe billing stays disabled until these are added to .env.
+      AGNTSPARK_GATEWAY_STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      AGNTSPARK_GATEWAY_STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      AGNTSPARK_GATEWAY_STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      AGNTSPARK_GATEWAY_PUBLIC_BASE_URL: https://${API_DOMAIN}
       # Trust X-Forwarded-For from Caddy so the login rate limiter keys on the
       # real client IP instead of the proxy's.
       FORWARDED_ALLOW_IPS: "*"

@@ -29,6 +29,13 @@ class User(Base):
     plan: Mapped[str] = mapped_column(
         String(32), nullable=False, default="free", server_default="free"
     )
+    # Stripe billing (services/billing_service.py). The plan follows the
+    # subscription's status via webhooks.
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    subscription_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

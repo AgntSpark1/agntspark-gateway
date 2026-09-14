@@ -29,6 +29,7 @@ dependencies = [
     "redis>=5.1.0",
     "structlog>=24.4.0",
     "agntspark-core[runtime] @ git+https://github.com/AgntSpark1/agntspark-core.git@f5947a8d772d7d194eb834a5fe785174bd834469",
+    "stripe>=12",
 ]
 
 [project.optional-dependencies]

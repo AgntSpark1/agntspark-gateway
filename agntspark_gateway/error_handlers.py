@@ -15,10 +15,13 @@ from fastapi.responses import JSONResponse
 
 from .exceptions import (
     ApiKeyNotFoundError,
+    BillingConflictError,
+    BillingNotConfiguredError,
     BuildNotSupportedError,
     DeploymentFailedError,
     EmailAlreadyRegisteredError,
     InvalidInviteError,
+    InvalidWebhookError,
     NotFoundError,
     NotImplementedStubError,
     QuotaExceededError,
@@ -31,6 +34,9 @@ _STATUS_MAP: dict[type[AgntSparkError], int] = {
     AuthorisationError: status.HTTP_403_FORBIDDEN,
     InvalidInviteError: status.HTTP_403_FORBIDDEN,
     QuotaExceededError: status.HTTP_403_FORBIDDEN,
+    InvalidWebhookError: status.HTTP_400_BAD_REQUEST,
+    BillingConflictError: status.HTTP_409_CONFLICT,
+    BillingNotConfiguredError: status.HTTP_503_SERVICE_UNAVAILABLE,
     RegistrationClosedError: status.HTTP_403_FORBIDDEN,
     NotFoundError: status.HTTP_404_NOT_FOUND,
     ApiKeyNotFoundError: status.HTTP_404_NOT_FOUND,
