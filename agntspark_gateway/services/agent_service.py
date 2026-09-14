@@ -16,6 +16,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from agntspark_core.config import LLMProvider
 from agntspark_core.exceptions import ScalingError as CoreScalingError
 from agntspark_core.runtime import AgentRuntime
 from agntspark_core.runtime import ContainerNotFoundError as CoreContainerNotFoundError
@@ -38,6 +39,13 @@ from ..schemas.agents import (
 from ..security.secrets import decrypt_secret, encrypt_secret
 
 _SECRET_MASK = "***"
+
+# Where agntspark/agent-runtime reads each provider's key from.
+_PROVIDER_KEY_ENV = {
+    LLMProvider.OPENAI: "OPENAI_API_KEY",
+    LLMProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
+    LLMProvider.GOOGLE: "GOOGLE_API_KEY",
+}
 
 
 def _new_agent_id() -> str:
@@ -103,7 +111,16 @@ def _apply_deploy_config(agent: Agent, deploy: DeployConfig) -> None:
     agent.gpu_type = deploy.resources.gpu_type
     agent.disk_gb = deploy.resources.disk_gb
     agent.ephemeral_storage_gb = deploy.resources.ephemeral_storage_gb
-    agent.env = _env_to_storage(deploy.env)
+    new_env = _env_to_storage(deploy.env)
+    # A bring-your-own LLM key (AgentConfigIn.api_key) isn't part of any
+    # DeployConfig the caller sends later, so a redeploy must not drop it.
+    redefined = {e["key"] for e in new_env}
+    kept = [
+        e
+        for e in (agent.env or [])
+        if e["key"] in _PROVIDER_KEY_ENV.values() and e["key"] not in redefined
+    ]
+    agent.env = new_env + kept
     agent.image = deploy.image
     agent.build_path = deploy.build_path
     agent.command = deploy.command
@@ -113,6 +130,15 @@ def _apply_deploy_config(agent: Agent, deploy: DeployConfig) -> None:
     agent.min_replicas = deploy.min_replicas
     agent.max_replicas = deploy.max_replicas
     agent.port = deploy.port
+
+
+def _with_provider_key(
+    env: list[dict[str, Any]], *, model: str, api_key: str
+) -> list[dict[str, Any]]:
+    key_name = _PROVIDER_KEY_ENV[LLMProvider.for_model(model)]
+    return [e for e in env if e["key"] != key_name] + [
+        {"key": key_name, "value": encrypt_secret(api_key), "secret": True}
+    ]
 
 
 def _deploy_config_from_agent(agent: Agent) -> DeployConfig:
@@ -140,10 +166,12 @@ def _deploy_config_from_agent(agent: Agent) -> DeployConfig:
 
 
 def to_agent_response(agent: Agent) -> AgentResponse:
-    # An agent with neither image nor build_path has never had a deploy
-    # config applied (see create_agent) — DeployConfig itself requires one
-    # of the two, so there's nothing valid to construct yet.
-    has_deploy_config = agent.image is not None or agent.build_path is not None
+    # A still-pending agent with neither image nor build_path has never had a
+    # deploy config applied (see create_agent). Once deployed, image=None just
+    # means the platform's default runtime image.
+    has_deploy_config = (
+        agent.status != "pending" or agent.image is not None or agent.build_path is not None
+    )
     return AgentResponse(
         id=agent.id,
         name=agent.name,
@@ -181,6 +209,8 @@ async def create_agent(
     )
     if body.deploy is not None:
         _apply_deploy_config(agent, body.deploy)
+    if body.api_key:
+        agent.env = _with_provider_key(agent.env or [], model=body.model, api_key=body.api_key)
 
     db.add(agent)
     await db.commit()

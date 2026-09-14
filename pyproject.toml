@@ -28,7 +28,7 @@ dependencies = [
     "sse-starlette>=2.1.0",
     "redis>=5.1.0",
     "structlog>=24.4.0",
-    "agntspark-core @ git+https://github.com/AgntSpark1/agntspark-core.git@73b4aef549320f68f17c68981638e8dc6ff4f86c",
+    "agntspark-core[runtime] @ git+https://github.com/AgntSpark1/agntspark-core.git@aa3ba0a99ceb9af88bf750982a965c2770f00182",
 ]
 
 [project.optional-dependencies]

@@ -146,9 +146,20 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
   on one Docker host — this matches the current single-VM production
   target (`deploy/`). Kubernetes support (the docs' "K8s Pod
   Manager") is future work, not implemented here or in agntspark-core.
-- **No build pipeline.** Deploys need a pre-built `image` (or omit both
-  `image`/`build_path` to use the platform's default generic runtime
-  image). Supplying only `build_path` returns `501 BUILD_NOT_SUPPORTED`.
+- **Default runtime image.** Omit both `image` and `build_path` to run
+  `settings.docker_image` (`agntspark/agent-runtime`, built from
+  agntspark-core's Dockerfile), which serves runtime contract v1
+  (`GET /health`, `POST /invoke` — see agntspark-core's README). The
+  gateway passes `AGENT_ID`, `AGENT_NAME`, `SYSTEM_PROMPT` (empty when unset,
+  so a template image keeps its own prompt), `LLM_MODEL` and
+  `LLM_PROVIDER` (inferred from the model: `claude-*` → anthropic,
+  `gemini-*` → google, else openai).
+- **Bring your own LLM key.** `AgentConfigIn.api_key` is stored as a
+  Fernet-encrypted secret env var named for the model's provider
+  (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`), shown masked,
+  and kept across redeploys that don't redefine it.
+- **No build pipeline.** Supplying only `build_path` returns
+  `501 BUILD_NOT_SUPPORTED`.
 - **Metrics are partial by design.** `cpu_percent`/`memory_mb`/`replicas`
   in `/metrics` are real, live Docker stats. `request_count`/`request_rate`/
   latency percentiles are always 0 — they need an in-path request proxy

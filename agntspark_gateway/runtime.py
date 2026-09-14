@@ -60,8 +60,8 @@ def _to_core_config(
     system_prompt: str | None,
     resources: dict[str, Any] | None,
 ) -> CoreAgentConfig:
-    llm_provider = LLMProvider.OPENAI
-    llm = LLMConfig(provider=llm_provider, model=model or "gpt-4o")
+    model = model or "gpt-4o"
+    llm = LLMConfig(provider=LLMProvider.for_model(model), model=model)
 
     core_resources = CoreResourceLimits()
     if resources:
@@ -77,7 +77,9 @@ def _to_core_config(
     return CoreAgentConfig(
         name=name,
         agent_id=agent_id,
-        system_prompt=system_prompt or "You are a helpful AI assistant.",
+        # Empty (not a generic default) so an image built on agntspark/agent-runtime
+        # falls back to its own template's prompt.
+        system_prompt=system_prompt or "",
         llm=llm,
         resources=core_resources,
     )

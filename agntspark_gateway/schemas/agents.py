@@ -57,6 +57,8 @@ class DeployConfig(BaseModel):
     replicas: int = Field(default=1, ge=1, le=100)
     resources: ResourceLimits = Field(default_factory=ResourceLimits)
     env: list[EnvVar] = Field(default_factory=list)
+    # Neither image nor build_path → the platform's runtime image
+    # (settings.docker_image), which serves the runtime contract.
     image: str | None = None
     build_path: str | None = None
     command: str | None = None
@@ -73,14 +75,6 @@ class DeployConfig(BaseModel):
         min_r = info.data.get("min_replicas", 1)
         if v < min_r:
             raise ValueError("max_replicas must be >= min_replicas")
-        return v
-
-    @field_validator("build_path")
-    @classmethod
-    def _image_or_path(cls, v: str | None, info: Any) -> str | None:
-        image = info.data.get("image")
-        if not image and not v:
-            raise ValueError("Either 'image' or 'build_path' must be provided")
         return v
 
 
