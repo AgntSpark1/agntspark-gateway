@@ -85,6 +85,33 @@ class RateLimitExceededError(AgntSparkError):
         )
 
 
+class RegistrationClosedError(AgntSparkError):
+    """Raised on register when registration_mode is "closed"."""
+
+    def __init__(self) -> None:
+        super().__init__("Registration is closed.", code="REGISTRATION_CLOSED")
+
+
+class InvalidInviteError(AgntSparkError):
+    """Missing, unknown, revoked, expired or used-up invite code.
+
+    One message for every case, so codes can't be probed for which state
+    they're in.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "A valid invite code is required to create an account.", code="INVALID_INVITE"
+        )
+
+
+class InviteNotFoundError(NotFoundError):
+    """Raised when an admin references an invite id that doesn't exist."""
+
+    def __init__(self, invite_id: str) -> None:
+        super().__init__("Invite", details={"invite_id": invite_id})
+
+
 class DeploymentFailedError(AgntSparkError):
     """Raised when the underlying container runtime fails to deploy/scale an agent."""
 
@@ -108,4 +135,7 @@ __all__ = [
     "NotImplementedStubError",
     "BuildNotSupportedError",
     "DeploymentFailedError",
+    "RegistrationClosedError",
+    "InvalidInviteError",
+    "InviteNotFoundError",
 ]

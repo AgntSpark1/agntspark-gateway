@@ -5,11 +5,18 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..db import get_db
 from ..exceptions import AuthenticationError
 from ..models.user import User
 from ..roles import role_to_str
-from ..schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from ..schemas.auth import (
+    LoginRequest,
+    RegisterRequest,
+    RegistrationInfo,
+    TokenResponse,
+    UserOut,
+)
 from ..security.dependencies import Principal, get_current_principal
 from ..security.jwt import create_access_token
 from ..security.rate_limit import enforce_login_rate_limit
@@ -43,8 +50,20 @@ def _token_response(user: User) -> TokenResponse:
     dependencies=[Depends(enforce_login_rate_limit)],
 )
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
-    user = await register_user(db, email=body.email, password=body.password, name=body.name)
+    user = await register_user(
+        db,
+        email=body.email,
+        password=body.password,
+        name=body.name,
+        invite_code=body.invite_code,
+    )
     return _token_response(user)
+
+
+@router.get("/registration", response_model=RegistrationInfo)
+async def registration() -> RegistrationInfo:
+    """How accounts can be created: open, invite (needs invite_code) or closed."""
+    return RegistrationInfo(mode=settings.registration_mode)
 
 
 @router.post(

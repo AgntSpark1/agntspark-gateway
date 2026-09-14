@@ -8,6 +8,8 @@ processes share an environment (e.g. the same ``.env`` / compose file).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +29,9 @@ class GatewaySettings(BaseSettings):
     jwt_expire_minutes: int = 60
     bcrypt_rounds: int = 12
     api_key_prefix: str = "agnt"
+    # Who may create an account: anyone ("open"), only holders of an
+    # admin-issued invite code ("invite"), or nobody ("closed").
+    registration_mode: Literal["open", "invite", "closed"] = "open"
     cors_allow_origins: list[str] = ["http://localhost:5173"]
     redis_url: str | None = None
     log_level: str = "INFO"

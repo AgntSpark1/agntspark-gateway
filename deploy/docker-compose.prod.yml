@@ -62,6 +62,8 @@ services:
       AGNTSPARK_GATEWAY_CORS_ALLOW_ORIGINS: '["https://${API_DOMAIN}"]'
       AGNTSPARK_GATEWAY_AGENT_BASE_DOMAIN: ${AGENT_DOMAIN:?AGENT_DOMAIN missing from .env}
       AGNTSPARK_GATEWAY_INGRESS_INTERNAL_TOKEN: ${INGRESS_TOKEN:?INGRESS_TOKEN missing from .env}
+      # Private alpha: accounts need an admin-issued invite code.
+      AGNTSPARK_GATEWAY_REGISTRATION_MODE: ${REGISTRATION_MODE:-invite}
       # Trust X-Forwarded-For from Caddy so the login rate limiter keys on the
       # real client IP instead of the proxy's.
       FORWARDED_ALLOW_IPS: "*"

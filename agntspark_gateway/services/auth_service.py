@@ -6,15 +6,33 @@ from agntspark_core.auth import Role
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..exceptions import AuthenticationError, EmailAlreadyRegisteredError
+from ..config import settings
+from ..exceptions import (
+    AuthenticationError,
+    EmailAlreadyRegisteredError,
+    InvalidInviteError,
+    RegistrationClosedError,
+)
 from ..models.user import User
 from ..security.passwords import hash_password, verify_password
+from .invite_service import claim_invite
 
 
-async def register_user(db: AsyncSession, *, email: str, password: str, name: str) -> User:
+async def register_user(
+    db: AsyncSession, *, email: str, password: str, name: str, invite_code: str | None = None
+) -> User:
+    mode = settings.registration_mode
+    if mode == "closed":
+        raise RegistrationClosedError()
+
     existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none() is not None:
         raise EmailAlreadyRegisteredError(email)
+
+    if mode == "invite":
+        if not invite_code or not invite_code.strip():
+            raise InvalidInviteError()
+        await claim_invite(db, invite_code)
 
     user = User(
         email=email,
@@ -23,6 +41,7 @@ async def register_user(db: AsyncSession, *, email: str, password: str, name: st
         role=int(Role.VIEWER),
     )
     db.add(user)
+    # Commits the invite's use together with the account.
     await db.commit()
     await db.refresh(user)
     return user

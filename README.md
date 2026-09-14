@@ -95,12 +95,16 @@ scale-up path.
 
 | Method & path | Auth | Notes |
 |---|---|---|
-| `POST /v1/auth/register` | none | `{email,password,name}` → JWT |
+| `POST /v1/auth/register` | none | `{email,password,name,invite_code?}` → JWT |
+| `GET /v1/auth/registration` | none | `{mode}`: `open`, `invite` (register needs `invite_code`) or `closed` |
 | `POST /v1/auth/login` | none | `{email,password}` → JWT |
 | `GET /v1/auth/me` | Bearer (JWT or key) | current user |
 | `POST /v1/api-keys` | JWT only | mint a new API key (raw value shown once) |
 | `GET /v1/api-keys` | Bearer | list caller's own keys |
 | `DELETE /v1/api-keys/{id}` | Bearer | revoke a key |
+| `POST /v1/admin/invites` | admin | `{note?,max_uses?,expires_in_days?}` → invite (raw `code` shown once) |
+| `GET /v1/admin/invites` | admin | list invites with status (no raw codes) |
+| `DELETE /v1/admin/invites/{id}` | admin | revoke an invite |
 | `POST /v1/agents` | Bearer | create (+ deploy immediately if `deploy` is given) |
 | `GET /v1/agents` | Bearer | list caller's own agents (filter by `status`/`tag`) |
 | `GET /v1/agents/{id}` | Bearer | get one |
@@ -121,6 +125,12 @@ scale-up path.
   instead of the in-memory `APIKeyStore` in agntspark-core.
 - A single `Authorization: Bearer <token>` header accepts either — the
   `agnt_` prefix unambiguously distinguishes an API key from a JWT.
+- **Registration mode** (`AGNTSPARK_GATEWAY_REGISTRATION_MODE`): `open`
+  (default for development), `invite` (production default in
+  `deploy/docker-compose.prod.yml`) or `closed`. In invite mode, `register`
+  consumes one use of an admin-issued `inv_…` code (stored only as SHA-256,
+  row-locked, and counted in the same transaction as the new account); every
+  bad-code case returns the same `403 INVALID_INVITE`.
 
 See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"/"admin"`
 (console) string mapping.

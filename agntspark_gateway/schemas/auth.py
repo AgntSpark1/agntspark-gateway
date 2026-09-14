@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_serializer
 
@@ -11,6 +12,12 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
     name: str = Field(min_length=1, max_length=255)
+    # Required when registration_mode is "invite"; ignored otherwise.
+    invite_code: str | None = Field(default=None, max_length=128)
+
+
+class RegistrationInfo(BaseModel):
+    mode: Literal["open", "invite", "closed"]
 
 
 class LoginRequest(BaseModel):

@@ -18,14 +18,18 @@ from .exceptions import (
     BuildNotSupportedError,
     DeploymentFailedError,
     EmailAlreadyRegisteredError,
+    InvalidInviteError,
     NotFoundError,
     NotImplementedStubError,
     RateLimitExceededError,
+    RegistrationClosedError,
 )
 
 _STATUS_MAP: dict[type[AgntSparkError], int] = {
     AuthenticationError: status.HTTP_401_UNAUTHORIZED,
     AuthorisationError: status.HTTP_403_FORBIDDEN,
+    InvalidInviteError: status.HTTP_403_FORBIDDEN,
+    RegistrationClosedError: status.HTTP_403_FORBIDDEN,
     NotFoundError: status.HTTP_404_NOT_FOUND,
     ApiKeyNotFoundError: status.HTTP_404_NOT_FOUND,
     EmailAlreadyRegisteredError: status.HTTP_409_CONFLICT,
