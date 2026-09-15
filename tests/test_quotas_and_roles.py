@@ -79,9 +79,10 @@ class TestQuotas:
     async def test_total_vcpu_counts_every_running_agent(
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        headers = await _account(client, db_session, "vcpu@agntspark.com")
+        # On free, the replica limit binds before total vCPU can; pro reaches it.
+        headers = await _account(client, db_session, "vcpu@agntspark.com", plan="pro")
         first = await client.post(
-            "/v1/agents", json={"name": "first", "deploy": _deploy(2, 1.0)}, headers=headers
+            "/v1/agents", json={"name": "first", "deploy": _deploy(8, 2.0)}, headers=headers
         )
         assert first.status_code == 201
 
@@ -97,7 +98,9 @@ class TestQuotas:
         headers = await _account(client, db_session, "scale@agntspark.com")
         agent = (
             await client.post(
-                "/v1/agents", json={"name": "s", "deploy": _deploy(2, 1.0)}, headers=headers
+                "/v1/agents",
+                json={"name": "s", "deploy": _deploy(FREE.max_replicas, 1.0)},
+                headers=headers,
             )
         ).json()
 
@@ -106,7 +109,7 @@ class TestQuotas:
         )
         assert resp.status_code == 403
         after = (await client.get(f"/v1/agents/{agent['id']}", headers=headers)).json()
-        assert after["replicas"] == 2
+        assert after["replicas"] == FREE.max_replicas
 
     async def test_redeploy_does_not_count_the_agent_twice(
         self, client: AsyncClient, db_session: AsyncSession

@@ -60,11 +60,29 @@
 	}
 }
 
-# Per-agent ingress: <slug>.{$AGENT_DOMAIN} → one of that agent's containers.
-*.{$AGENT_DOMAIN} {
+# How agent hostnames get certificates, picked by AGENT_TLS (bootstrap.sh
+# sets it from .env):
+#   on_demand — one certificate per hostname, on its first visit. Every
+#               hostname is then published in certificate transparency logs,
+#               where scanners find it within minutes.
+#   wildcard  — one *.AGENT_DOMAIN certificate through a Cloudflare DNS
+#               challenge, so agent hostnames are never published. Needs
+#               CLOUDFLARE_API_TOKEN (Zone → DNS → Edit on the zone).
+(agent_tls_on_demand) {
 	tls {
 		on_demand
 	}
+}
+
+(agent_tls_wildcard) {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+}
+
+# Per-agent ingress: <slug>.{$AGENT_DOMAIN} → one of that agent's containers.
+*.{$AGENT_DOMAIN} {
+	import agent_tls_{$AGENT_TLS:on_demand}
 
 	route {
 		# Visitors must never pick the upstream, impersonate the edge, or

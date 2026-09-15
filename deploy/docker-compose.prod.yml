@@ -82,7 +82,10 @@ services:
         condition: service_healthy
 
   caddy:
-    image: caddy:2
+    # caddy:2 plus the Cloudflare DNS provider (deploy/caddy/Dockerfile).
+    build:
+      context: ./caddy
+    image: agntspark-caddy
     restart: unless-stopped
     ports:
       # Explicit 0.0.0.0 — daemon.json makes the default bind address 127.0.0.1.
@@ -92,6 +95,9 @@ services:
       API_DOMAIN: ${API_DOMAIN:?API_DOMAIN missing from .env}
       AGENT_DOMAIN: ${AGENT_DOMAIN:?AGENT_DOMAIN missing from .env}
       INGRESS_TOKEN: ${INGRESS_TOKEN:?INGRESS_TOKEN missing from .env}
+      # "wildcard" once CLOUDFLARE_API_TOKEN is in .env (see Caddyfile).
+      AGENT_TLS: ${AGENT_TLS:-on_demand}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /opt/agntspark/agntspark-console/dist:/srv/console:ro

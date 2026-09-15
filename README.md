@@ -77,8 +77,11 @@ template, local to the host) and restart. It also hardens the host:
 - `/metrics` is 404 at the edge.
 - Nightly database backups: `agntspark-backup.timer` runs `deploy/backup.sh`
   at 03:17 UTC, writing a `pg_dump` archive to `/opt/agntspark/backups`
-  (mode 600, 14 days kept; restore command in the script). They share the
-  VM's disk, so copy them off-host to survive losing the machine.
+  (mode 600, 14 days kept; restore command in the script). Once
+  `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and
+  `R2_SECRET_ACCESS_KEY` are in `.env`, each archive is also copied to that
+  Cloudflare R2 bucket (kept `R2_KEEP_DAYS`, default 30), so a lost VM
+  doesn't take the backups with it.
 
 Secrets are generated once into `/opt/agntspark/.env` (mode 600). **Back
 up `SECRET_ENCRYPTION_KEY`** — losing it makes every stored agent secret
@@ -117,10 +120,20 @@ non-public gateway endpoints (`routers/ingress.py`):
 
 Traffic goes straight from Caddy to the container over `agntspark-net`;
 the gateway is not on that network. Agents must listen on
-`DeployConfig.port` (default 8080). Each new agent hostname costs one Let's
-Encrypt certificate (50 new certificates per registered domain per week),
-fine for an invite-only Alpha; a wildcard certificate via DNS-01 is the
-scale-up path.
+`DeployConfig.port` (default 8080).
+
+Certificates (`AGENT_TLS`, written to `.env` by `bootstrap.sh`):
+
+- `on_demand` (default): one Let's Encrypt certificate per hostname on its
+  first visit, allowed by `tls-ask`. Each hostname is then published in
+  certificate transparency logs, and scanners start requesting it within
+  minutes; it also costs one of Let's Encrypt's 50 new certificates per
+  registered domain per week.
+- `wildcard`: chosen automatically once `CLOUDFLARE_API_TOKEN` (a Cloudflare
+  API token with Zone → DNS → Edit on the zone) is in `.env`. Caddy, built
+  with the Cloudflare DNS provider (`deploy/caddy/Dockerfile`), gets a single
+  `*.AGENT_DOMAIN` certificate through a DNS challenge, so agent hostnames
+  never appear in those logs.
 
 ## Endpoints
 
@@ -139,7 +152,7 @@ scale-up path.
 | `GET /v1/admin/users` | admin | users with role, plan, active flag and agent count |
 | `PATCH /v1/admin/users/{id}` | admin | `{role?,plan?,is_active?}` (can't demote/deactivate yourself) |
 | `GET /v1/account/usage` | Bearer | caller's plan, limits, current usage and this month's metered usage |
-| `POST /v1/agents` | Bearer | create (+ deploy immediately if `deploy` is given); `access` defaults to `public` |
+| `POST /v1/agents` | Bearer | create (+ deploy immediately if `deploy` is given); `access` defaults to `private`, and then the response's `access_key` is the agent's first key (shown once) |
 | `GET /v1/agents` | Bearer | list caller's own agents (filter by `status`/`tag`) |
 | `GET /v1/agents/{id}` | Bearer | get one |
 | `PATCH /v1/agents/{id}` | Bearer | `{access?, rate_limit_rpm?}` — `rate_limit_rpm: null` restores the default |

@@ -97,7 +97,9 @@ class AgentConfigIn(BaseModel):
     api_key: str | None = None
     system_prompt: str | None = Field(default=None, max_length=32_000)
     deploy: DeployConfig | None = None
-    access: AgentAccess = AgentAccess.PUBLIC
+    # Private unless asked otherwise: a public URL spends the owner's model
+    # credits for anyone who finds it, and hostnames don't stay secret.
+    access: AgentAccess = AgentAccess.PRIVATE
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, str] = Field(default_factory=dict)
 
@@ -129,6 +131,9 @@ class AgentResponse(BaseModel):
     access: AgentAccess = AgentAccess.PUBLIC
     # Requests per minute per client IP; None means the platform default.
     rate_limit_rpm: int | None = None
+    # Only in the response to creating a private agent: its first access key,
+    # which is never shown again.
+    access_key: str | None = None
 
 
 class AgentUpdate(BaseModel):

@@ -27,6 +27,7 @@ from ..schemas.agents import (
     AccessKeyCreate,
     AccessKeyCreateResponse,
     AccessKeyOut,
+    AgentAccess,
     AgentConfigIn,
     AgentListResponse,
     AgentResponse,
@@ -61,7 +62,14 @@ async def create_agent(
     agent = await agent_service.create_agent(
         db, runtime=runtime, user_id=principal.user_id, body=body
     )
-    return agent_service.to_agent_response(agent)
+    response = agent_service.to_agent_response(agent)
+    if agent.access == AgentAccess.PRIVATE.value:
+        # A private agent refuses every request until it has a key, so it
+        # comes with its first one.
+        _, response.access_key = await access_key_service.create_access_key(
+            db, agent=agent, label="default"
+        )
+    return response
 
 
 @router.get("", response_model=AgentListResponse)

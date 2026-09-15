@@ -100,6 +100,29 @@ for dir in "$BASE"/agntspark-templates/templates/*/; do
     "$BASE/agntspark-templates"
 done
 
+echo "==> Agent certificates"
+# One wildcard certificate through Cloudflare DNS once CLOUDFLARE_API_TOKEN is
+# in .env (agent hostnames then stay out of certificate transparency logs),
+# otherwise one per hostname on demand. A token Caddy rejects would keep Caddy
+# from starting at all, taking the console and API down with it, so the
+# wildcard setup is validated first and skipped if it fails.
+docker compose --env-file "$ENV_FILE" -f "$DEPLOY/docker-compose.prod.yml" build --quiet caddy
+agent_tls=on_demand
+if grep -q '^CLOUDFLARE_API_TOKEN=.' "$ENV_FILE"; then
+  if CLOUDFLARE_API_TOKEN=$(sed -n 's/^CLOUDFLARE_API_TOKEN=//p' "$ENV_FILE" | tail -1) \
+    INGRESS_TOKEN=validate-only AGENT_TLS=wildcard API_DOMAIN="$API_DOMAIN" AGENT_DOMAIN="$AGENT_DOMAIN" \
+    docker run --rm -e CLOUDFLARE_API_TOKEN -e INGRESS_TOKEN -e AGENT_TLS -e API_DOMAIN -e AGENT_DOMAIN \
+      -v "$DEPLOY/Caddyfile:/etc/caddy/Caddyfile:ro" agntspark-caddy \
+      caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+    agent_tls=wildcard
+  else
+    echo "    CLOUDFLARE_API_TOKEN was rejected by Caddy; keeping on-demand certificates" >&2
+  fi
+fi
+sed -i '/^AGENT_TLS=/d' "$ENV_FILE"
+echo "AGENT_TLS=$agent_tls" >> "$ENV_FILE"
+echo "    agent certificates: $agent_tls"
+
 echo "==> Stack"
 cd "$DEPLOY"
 # The agents network needs a fixed bridge name and subnet for the isolation

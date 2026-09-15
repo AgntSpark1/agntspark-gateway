@@ -42,7 +42,7 @@ async def _create_agent(
     )
     headers = {"Authorization": f"Bearer {register.json()['access_token']}"}
 
-    body: dict[str, Any] = {"name": name}
+    body: dict[str, Any] = {"name": name, "access": "public"}
     if deploy:
         container = make_container("aaa111", "agntspark-agt-0", "irrelevant")
         # User-defined networks only report the address under Networks.<name>.

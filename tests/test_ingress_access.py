@@ -35,7 +35,7 @@ async def _owner_and_agent(
     make_container: Any,
     *,
     email: str,
-    access: str = "public",
+    access: str | None = "public",
 ) -> tuple[dict[str, str], dict[str, Any]]:
     register = await client.post(
         "/v1/auth/register",
@@ -49,7 +49,11 @@ async def _owner_and_agent(
     mock_docker.containers.run.return_value = container
     resp = await client.post(
         "/v1/agents",
-        json={"name": "bot", "access": access, "deploy": {"image": "nginx:alpine", "port": 80}},
+        json={
+            "name": "bot",
+            **({"access": access} if access else {}),
+            "deploy": {"image": "nginx:alpine", "port": 80},
+        },
         headers=headers,
     )
     assert resp.status_code == 201, resp.text
@@ -70,14 +74,34 @@ async def _visit(
 
 
 class TestPrivateAgents:
-    async def test_new_agents_are_public_by_default(
+    async def test_new_agents_are_private_and_come_with_a_key(
+        self, client: AsyncClient, mock_docker: MagicMock, make_container: Any
+    ) -> None:
+        headers, agent = await _owner_and_agent(
+            client, mock_docker, make_container, email="default@agntspark.com", access=None
+        )
+        assert agent["access"] == "private"
+        assert agent["rate_limit_rpm"] is None
+        key = agent["access_key"]
+        assert key.startswith("agk_")
+
+        assert (await _visit(client, agent)).status_code == 401
+        assert (await _visit(client, agent, key=key)).status_code == 204
+
+        # Shown once: the agent read back doesn't carry it.
+        again = (await client.get(f"/v1/agents/{agent['id']}", headers=headers)).json()
+        assert again["access_key"] is None
+        keys = (await client.get(f"/v1/agents/{agent['id']}/access-keys", headers=headers)).json()
+        assert [(k["label"], k["key_preview"]) for k in keys] == [("default", key[:12] + "...")]
+
+    async def test_public_agents_come_without_a_key(
         self, client: AsyncClient, mock_docker: MagicMock, make_container: Any
     ) -> None:
         _, agent = await _owner_and_agent(
-            client, mock_docker, make_container, email="pub@agntspark.com"
+            client, mock_docker, make_container, email="pub@agntspark.com", access="public"
         )
         assert agent["access"] == "public"
-        assert agent["rate_limit_rpm"] is None
+        assert agent["access_key"] is None
         assert (await _visit(client, agent)).status_code == 204
 
     async def test_private_agent_needs_one_of_its_keys(
@@ -117,18 +141,19 @@ class TestPrivateAgents:
             client, mock_docker, make_container, email="keys@agntspark.com", access="private"
         )
         created = (
-            await client.post(f"/v1/agents/{agent['id']}/access-keys", headers=headers)
+            await client.post(
+                f"/v1/agents/{agent['id']}/access-keys", json={"label": "ci"}, headers=headers
+            )
         ).json()
 
         listed = (await client.get(f"/v1/agents/{agent['id']}/access-keys", headers=headers)).json()
-        assert listed == [
-            {
-                "id": created["id"],
-                "label": "default",
-                "key_preview": created["key"][:12] + "...",
-                "created_at": created["created_at"],
-            }
-        ]
+        assert sorted(k["label"] for k in listed) == ["ci", "default"]
+        assert {
+            "id": created["id"],
+            "label": "ci",
+            "key_preview": created["key"][:12] + "...",
+            "created_at": created["created_at"],
+        } in listed
 
         deleted = await client.delete(
             f"/v1/agents/{agent['id']}/access-keys/{created['id']}", headers=headers

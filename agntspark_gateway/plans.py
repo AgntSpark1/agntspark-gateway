@@ -5,8 +5,7 @@ action that would take an account past its plan is refused, never billed
 after the fact. Admins are exempt. Resource limits count running replicas:
 replicas × the per-replica CPU/memory requested in ``DeployConfig``.
 
-The numbers are launch defaults for the invite-only beta, not a pricing
-decision; Stripe plans map onto these keys (see billing).
+Stripe subscriptions map onto these keys (see billing).
 """
 
 from __future__ import annotations
@@ -26,24 +25,27 @@ class PlanLimits:
     max_agent_rpm: int
 
 
+# Alpha pricing: free, and pro at $29/month (the Stripe price in
+# stripe_price_pro). CPU limits are caps rather than reservations, so they
+# can exceed the host; memory is what actually fills it, so it's kept tight.
 PLANS: dict[str, PlanLimits] = {
     "free": PlanLimits(
-        max_agents=5,
-        max_replicas=4,
-        max_vcpu=2.0,
-        max_memory_mb=2048,
+        max_agents=3,
+        max_replicas=3,
+        max_vcpu=3.0,
+        max_memory_mb=1536,
         max_replica_cpu=1.0,
         max_replica_memory_mb=1024,
-        max_agent_rpm=600,
+        max_agent_rpm=300,
     ),
     "pro": PlanLimits(
-        max_agents=50,
-        max_replicas=50,
+        max_agents=20,
+        max_replicas=20,
         max_vcpu=16.0,
-        max_memory_mb=32768,
-        max_replica_cpu=4.0,
-        max_replica_memory_mb=8192,
-        max_agent_rpm=6000,
+        max_memory_mb=8192,
+        max_replica_cpu=2.0,
+        max_replica_memory_mb=4096,
+        max_agent_rpm=3000,
     ),
 }
 
