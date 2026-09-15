@@ -45,6 +45,13 @@ sudo API_DOMAIN=agntapi.agntspark.com AGENT_DOMAIN=run.agntspark.com bash deploy
 `AGENT_DOMAIN` needs a DNS-only (not proxied) wildcard record
 (`*.run.agntspark.com`) pointing at the host — see Agent ingress below.
 
+To update a provisioned host, run `sudo bash deploy/deploy.sh` there: it
+updates the gateway checkout first, then runs the new `bootstrap.sh` with the
+domains from `.env`. `.github/workflows/deploy.yml` does the same over SSH
+after CI passes on `main` (or on demand), once its `DEPLOY_*` secrets are set;
+the key gets a forced command so it can run nothing else (see the comment in
+`deploy/deploy.sh`).
+
 The script is idempotent — re-run it to pull `main` of the gateway,
 console, core and templates repos, rebuild the agent images
 (`agntspark/agent-runtime` plus one `agntspark/template-<name>` per official
@@ -92,8 +99,21 @@ non-public gateway endpoints (`routers/ingress.py`):
 - `GET /internal/ingress/route` (`forward_auth`, requires
   `X-Agnt-Internal-Token` = `AGNTSPARK_GATEWAY_INGRESS_INTERNAL_TOKEN`) —
   maps `X-Agnt-Host` to a random running replica and returns it as
-  `X-Agnt-Upstream: <container-ip>:<deploy.port>`; unknown agent → 404,
-  nothing running → 503, both shown to the visitor.
+  `X-Agnt-Upstream: <container-ip>:<deploy.port>`. On the way it:
+  1. rate limits the caller: `X-Agnt-Client-IP` (set by Caddy, never by the
+     visitor) may send the agent `rate_limit_rpm` requests a minute, or
+     `AGNTSPARK_GATEWAY_INGRESS_DEFAULT_RPM_PER_IP` (120) when unset → 429;
+  2. for `access: "private"` agents, requires `Authorization: Bearer agk_…`
+     matching one of the agent's access keys → 401;
+  3. caps the agent across all callers at its owner's plan `max_agent_rpm`
+     (admins exempt) → 429;
+  4. counts the request for metering.
+
+  Unknown agent → 404, nothing running → 503. Every refusal is shown to the
+  visitor as-is. The per-caller limit comes before the key check, so
+  strangers hammering a private agent don't use up its callers' allowance.
+  Limits and unflushed counts live in the gateway process
+  (`security/ingress_limits.py`), matching its single-process deployment.
 
 Traffic goes straight from Caddy to the container over `agntspark-net`;
 the gateway is not on that network. Agents must listen on
@@ -118,10 +138,14 @@ scale-up path.
 | `DELETE /v1/admin/invites/{id}` | admin | revoke an invite |
 | `GET /v1/admin/users` | admin | users with role, plan, active flag and agent count |
 | `PATCH /v1/admin/users/{id}` | admin | `{role?,plan?,is_active?}` (can't demote/deactivate yourself) |
-| `GET /v1/account/usage` | Bearer | caller's plan, limits and current usage |
-| `POST /v1/agents` | Bearer | create (+ deploy immediately if `deploy` is given) |
+| `GET /v1/account/usage` | Bearer | caller's plan, limits, current usage and this month's metered usage |
+| `POST /v1/agents` | Bearer | create (+ deploy immediately if `deploy` is given); `access` defaults to `public` |
 | `GET /v1/agents` | Bearer | list caller's own agents (filter by `status`/`tag`) |
 | `GET /v1/agents/{id}` | Bearer | get one |
+| `PATCH /v1/agents/{id}` | Bearer | `{access?, rate_limit_rpm?}` — `rate_limit_rpm: null` restores the default |
+| `POST /v1/agents/{id}/access-keys` | Bearer | `{label?}` → access key (raw `key` shown once) |
+| `GET /v1/agents/{id}/access-keys` | Bearer | list the agent's access keys (preview only) |
+| `DELETE /v1/agents/{id}/access-keys/{key_id}` | Bearer | revoke an access key |
 | `DELETE /v1/agents/{id}` | Bearer | stop + remove containers, delete the record |
 | `POST /v1/agents/{id}/deploy` | Bearer | (re)deploy, optionally with a new `DeployConfig` |
 | `POST /v1/agents/{id}/scale` | Bearer | manual scale up/down |
@@ -158,9 +182,11 @@ scale-up path.
 - **Usage metering** (`services/metering_service.py`, table `usage_hours`):
   every scheduler tick adds running replicas × requested vCPU/memory × the
   seconds since the previous tick (capped at 3× the interval, so a stalled
-  tick isn't counted as usage) to an hourly bucket per agent.
-  `GET /v1/account/usage` includes this month's replica-, vCPU- and
-  memory-GB-hours under `period`.
+  tick isn't counted as usage) to an hourly bucket per agent. Requests the
+  edge routes to an agent are counted in memory and flushed into the same
+  buckets (`requests`) on each tick and at shutdown; a crash loses at most
+  one interval's count. `GET /v1/account/usage` includes this month's
+  replica-, vCPU- and memory-GB-hours and requests under `period`.
 - **Billing** (`services/billing_service.py`, `routers/billing.py`): Stripe
   subscriptions for the `pro` plan. `POST /v1/billing/checkout` returns a
   Stripe Checkout URL (creating the Stripe customer once),
@@ -213,9 +239,11 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
 - **No build pipeline.** Supplying only `build_path` returns
   `501 BUILD_NOT_SUPPORTED`.
 - **Metrics are partial by design.** `cpu_percent`/`memory_mb`/`replicas`
-  in `/metrics` are real, live Docker stats. `request_count`/`request_rate`/
-  latency percentiles are always 0 — they need an in-path request proxy
-  that doesn't exist yet.
+  in `/v1/agents/{id}/metrics` are real, live Docker stats.
+  `request_count`/`request_rate`/latency percentiles there are always 0:
+  requests are counted per hour for usage (above), but latency and errors
+  would need Caddy's response to reach the gateway, which `forward_auth`
+  doesn't provide.
 - **Login/register rate limiting**: `security/rate_limit.py` is a
   Redis-backed fixed-window counter per client IP
   (`AGNTSPARK_GATEWAY_LOGIN_RATE_LIMIT_MAX_ATTEMPTS`, default 10 per
@@ -264,21 +292,17 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
 
 1. ~~Console `/api` vs gateway `/v1` mismatch~~ — the console now calls
    `/v1` directly (same origin in production via Caddy).
-2. ~~No path to create the first `ADMIN` user~~ — `register` still always
-   issues `VIEWER` by design (no public API should let a caller self-grant
-   elevated privileges), but `scripts/set_user_role.py --email ... --role
-   admin` now does this as a maintenance operation. **Role doesn't gate
-   anything yet** — `require_role()` exists (`security/dependencies.py`)
-   but no route uses it; every `/v1/agents*`/`/v1/api-keys*` check is
-   ownership-only. Wiring real RBAC into those routes is team-management
-   work, still not started.
+2. ~~No path to create the first `ADMIN` user~~ — `register` never grants
+   admin (no public API should let a caller self-grant elevated
+   privileges); `scripts/set_user_role.py --email ... --role admin` does it
+   as a maintenance operation. Roles are enforced (see Auth model); teams
+   and shared ownership of agents are not built.
 3. Multi-project scoping (`X-AgntSpark-Project`) and refresh tokens are
    reserved (config fields exist) but not implemented.
-4. ~~No per-agent public ingress~~ — see Agent ingress above. Still
-   missing: request-level auth in front of agents (they're public), and
-   custom domains.
-5. Request-level metrics (`request_count`, latency percentiles) need an
-   in-path proxy — not built yet, see above.
+4. ~~No per-agent public ingress~~ / ~~no auth in front of agents~~ — see
+   Agent ingress above. Still missing: custom domains.
+5. Per-agent latency and error metrics — requests are counted, but nothing
+   sees responses yet, see above.
 6. Log/metric streaming is poll-based (every 2s / `interval`s), not a true
    push from Docker's log-follow API — simpler, sufficient for the current
    scale, revisit if polling overhead becomes real.

@@ -52,6 +52,19 @@ def test_backup_timer_is_wired_to_an_installed_script() -> None:
     assert "systemctl enable --now agntspark-backup.timer" in bootstrap
 
 
+def test_deploy_script_is_read_before_it_updates_itself() -> None:
+    # deploy.sh resets the checkout it lives in; bash reads scripts as it
+    # goes, so everything must run from a function defined before the reset.
+    script = (DEPLOY / "deploy.sh").read_text()
+    body = script[script.index("main() {") :]
+    assert "git -C" in body
+    assert script.rstrip().endswith('main "$@"')
+    assert "bootstrap.sh" in body
+
+    workflow = (DEPLOY.parent / ".github" / "workflows" / "deploy.yml").read_text()
+    assert "deploy/deploy.sh" in workflow
+
+
 def test_agent_ingress_sets_the_client_ip_itself() -> None:
     # The gateway rate limits agent callers by this header, so a visitor must
     # not be able to supply their own.

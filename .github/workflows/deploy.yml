@@ -1,0 +1,67 @@
+# Deploys production after CI passes on main, or on demand (Actions → Deploy →
+# Run workflow — use that after merging to agntspark-console, -core or
+# -templates, which the host also pulls).
+#
+# Skipped, with a notice, until these repository secrets exist:
+#   DEPLOY_SSH_KEY      private key whose public half is in the deploy user's
+#                       authorized_keys with a forced command (see deploy/deploy.sh)
+#   DEPLOY_HOST         user@host, e.g. agntspark@203.0.113.10
+#   DEPLOY_KNOWN_HOSTS  the host's key line(s), from `ssh-keyscan <host>`
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check deploy secrets
+        id: secrets
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -n "$DEPLOY_SSH_KEY" ] && [ -n "$DEPLOY_HOST" ] && [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy secrets aren't set; skipping the production deploy."
+          fi
+
+      - name: Deploy
+        if: steps.secrets.outputs.configured == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # The key's forced command runs deploy/deploy.sh whatever is asked for.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "$DEPLOY_HOST" deploy
+
+      - name: Smoke test
+        if: steps.secrets.outputs.configured == 'true'
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors \
+            https://agntapi.agntspark.com/healthz
