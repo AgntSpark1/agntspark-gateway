@@ -54,6 +54,9 @@ class GatewaySettings(BaseSettings):
     # Shared secret the edge proxy presents on /internal/ingress/route; unset
     # rejects every routing lookup.
     ingress_internal_token: str | None = None
+    # Requests per minute one client IP may send an agent, unless its owner
+    # sets its own rate_limit_rpm.
+    ingress_default_rpm_per_ip: int = 120
     scheduler_interval_seconds: int = 30
     login_rate_limit_max_attempts: int = 10
     login_rate_limit_window_seconds: int = 300

@@ -52,6 +52,16 @@ def test_backup_timer_is_wired_to_an_installed_script() -> None:
     assert "systemctl enable --now agntspark-backup.timer" in bootstrap
 
 
+def test_agent_ingress_sets_the_client_ip_itself() -> None:
+    # The gateway rate limits agent callers by this header, so a visitor must
+    # not be able to supply their own.
+    caddyfile = (DEPLOY / "Caddyfile").read_text()
+    agents_site = caddyfile[caddyfile.index("*.{$AGENT_DOMAIN}") :]
+    assert "request_header -X-Agnt-Client-IP" in agents_site
+    assert "header_up X-Agnt-Client-IP {client_ip}" in agents_site
+    assert agents_site.index("request_header -X-Agnt-Client-IP") < agents_site.index("forward_auth")
+
+
 def test_caddy_address_is_the_one_isolation_allows() -> None:
     compose = (DEPLOY / "docker-compose.prod.yml").read_text()
     caddy_ip = re.search(r"ipv4_address:\s*(\S+)", compose)

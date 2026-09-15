@@ -5,6 +5,7 @@ the SDK deserialises gateway responses directly into those classes.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -36,6 +37,14 @@ class AgentRuntimeKind(str, Enum):
 class ScaleDirection(str, Enum):
     UP = "up"
     DOWN = "down"
+
+
+class AgentAccess(str, Enum):
+    """Who may call the agent's public URL."""
+
+    PUBLIC = "public"
+    # Only callers presenting one of the agent's access keys.
+    PRIVATE = "private"
 
 
 class ResourceLimits(BaseModel):
@@ -88,6 +97,7 @@ class AgentConfigIn(BaseModel):
     api_key: str | None = None
     system_prompt: str | None = Field(default=None, max_length=32_000)
     deploy: DeployConfig | None = None
+    access: AgentAccess = AgentAccess.PUBLIC
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, str] = Field(default_factory=dict)
 
@@ -116,6 +126,34 @@ class AgentResponse(BaseModel):
     error: str | None = None
     version: int = 1
     replicas: int = 0
+    access: AgentAccess = AgentAccess.PUBLIC
+    # Requests per minute per client IP; None means the platform default.
+    rate_limit_rpm: int | None = None
+
+
+class AgentUpdate(BaseModel):
+    """PATCH /v1/agents/{id}. Omitted fields stay as they are."""
+
+    access: AgentAccess | None = None
+    # null restores the platform default.
+    rate_limit_rpm: int | None = Field(default=None, ge=1, le=100_000)
+
+
+class AccessKeyCreate(BaseModel):
+    label: str = Field(default="default", min_length=1, max_length=128)
+
+
+class AccessKeyOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    key_preview: str
+    created_at: datetime
+
+
+class AccessKeyCreateResponse(AccessKeyOut):
+    """Includes the raw key — shown exactly once, at creation."""
+
+    key: str
 
 
 class AgentListResponse(BaseModel):

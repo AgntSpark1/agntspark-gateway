@@ -9,9 +9,10 @@ are HTTP/service/DB integration tests, not a live-container smoke test.
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from unittest.mock import MagicMock
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -28,6 +29,8 @@ from agntspark_gateway import db as db_module  # noqa: E402
 from agntspark_gateway.db import Base  # noqa: E402
 from agntspark_gateway.main import create_app  # noqa: E402
 from agntspark_gateway.routers import agents as agents_router  # noqa: E402
+from agntspark_gateway.security import ingress_limits  # noqa: E402
+from agntspark_gateway.services import metering_service  # noqa: E402
 
 
 def make_mock_container(container_id: str, name: str, agent_id: str, replica: str = "0"):
@@ -80,6 +83,16 @@ async def db_session(_engine) -> AsyncIterator[AsyncSession]:
     await session.close()
     await transaction.rollback()
     await connection.close()
+
+
+@pytest.fixture(autouse=True)
+def _reset_ingress_state() -> Iterator[None]:
+    # Rate-limit windows and unflushed request counts live in process memory.
+    ingress_limits.per_client.reset()
+    ingress_limits.per_agent.reset()
+    metering_service.discard_pending_requests()
+    yield
+    metering_service.discard_pending_requests()
 
 
 @pytest_asyncio.fixture

@@ -43,6 +43,12 @@ async def _tick(runtime: AgentRuntime, elapsed_seconds: float | None = None) -> 
     )
     now = datetime.now(UTC)
     async with AsyncSessionLocal() as db:
+        try:
+            await metering_service.flush_requests(db)
+        except Exception as exc:
+            # The counts stay pending for the next tick.
+            log.warning("scheduler: flushing request counts failed", error=str(exc))
+
         result = await db.execute(select(Agent).where(Agent.status.in_(_ACTIVE_STATUSES)))
         agents = list(result.scalars().all())
 

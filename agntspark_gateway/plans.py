@@ -22,6 +22,8 @@ class PlanLimits:
     max_memory_mb: int
     max_replica_cpu: float
     max_replica_memory_mb: int
+    # Requests per minute one agent's public URL serves, across all callers.
+    max_agent_rpm: int
 
 
 PLANS: dict[str, PlanLimits] = {
@@ -32,6 +34,7 @@ PLANS: dict[str, PlanLimits] = {
         max_memory_mb=2048,
         max_replica_cpu=1.0,
         max_replica_memory_mb=1024,
+        max_agent_rpm=600,
     ),
     "pro": PlanLimits(
         max_agents=50,
@@ -40,6 +43,7 @@ PLANS: dict[str, PlanLimits] = {
         max_memory_mb=32768,
         max_replica_cpu=4.0,
         max_replica_memory_mb=8192,
+        max_agent_rpm=6000,
     ),
 }
 

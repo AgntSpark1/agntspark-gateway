@@ -44,6 +44,15 @@ class Agent(Base):
     url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
+    # --- public ingress ---
+    # "public": anyone with the URL may call it. "private": requests need one
+    # of the agent's access keys (models/agent_access_key.py).
+    access: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="public", server_default="public"
+    )
+    # Requests per minute allowed from one client IP; None = platform default.
+    rate_limit_rpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # --- flattened DeployConfig ---
     # NOTE: unlike the other deploy-config fields below, `replicas` doubles
     # as the *live* running-replica count once deployed (see

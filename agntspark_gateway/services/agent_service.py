@@ -31,6 +31,7 @@ from ..schemas.agents import (
     AgentConfigIn,
     AgentLog,
     AgentResponse,
+    AgentUpdate,
     DeployConfig,
     EnvVar,
     Metrics,
@@ -189,6 +190,8 @@ def to_agent_response(agent: Agent) -> AgentResponse:
         error=agent.error,
         version=agent.version,
         replicas=agent.replicas,
+        access=agent.access,
+        rate_limit_rpm=agent.rate_limit_rpm,
     )
 
 
@@ -218,6 +221,7 @@ async def create_agent(
         system_prompt=body.system_prompt,
         tags=body.tags,
         agent_metadata=body.metadata,
+        access=body.access.value,
         status="pending",
     )
     if body.deploy is not None:
@@ -247,6 +251,20 @@ async def _get_owned(db: AsyncSession, *, user_id: uuid.UUID, agent_id: str) -> 
 
 async def get_agent(db: AsyncSession, *, user_id: uuid.UUID, agent_id: str) -> Agent:
     return await _get_owned(db, user_id=user_id, agent_id=agent_id)
+
+
+async def update_agent(
+    db: AsyncSession, *, user_id: uuid.UUID, agent_id: str, body: AgentUpdate
+) -> Agent:
+    agent = await _get_owned(db, user_id=user_id, agent_id=agent_id)
+    if body.access is not None:
+        agent.access = body.access.value
+    # Only when sent: an explicit null clears it, an omitted field doesn't.
+    if "rate_limit_rpm" in body.model_fields_set:
+        agent.rate_limit_rpm = body.rate_limit_rpm
+    await db.commit()
+    await db.refresh(agent)
+    return agent
 
 
 async def list_agents(
@@ -457,6 +475,7 @@ async def get_metrics(
 __all__ = [
     "create_agent",
     "get_agent",
+    "update_agent",
     "list_agents",
     "deploy_agent",
     "delete_agent",

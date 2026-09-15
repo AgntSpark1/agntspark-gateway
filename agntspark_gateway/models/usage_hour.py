@@ -1,8 +1,9 @@
-"""Hourly resource usage per agent — the basis for usage-based billing.
+"""Hourly usage per agent — the basis for usage-based billing.
 
 One row per (agent, hour), accumulated by the scheduler: running replicas ×
-the replica's requested vCPU / memory × seconds observed. No foreign key to
-agents, so usage outlives a deleted agent.
+the replica's requested vCPU / memory × seconds observed, plus the requests
+the edge routed to the agent. No foreign key to agents, so usage outlives a
+deleted agent.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,3 +33,4 @@ class UsageHour(Base):
     replica_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     vcpu_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     memory_mb_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    requests: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)

@@ -67,16 +67,22 @@
 	}
 
 	route {
-		# Visitors must never pick the upstream or impersonate the edge.
+		# Visitors must never pick the upstream, impersonate the edge, or
+		# choose which IP their requests are rate limited as.
 		request_header -X-Agnt-Upstream
 		request_header -X-Agnt-Internal-Token
+		request_header -X-Agnt-Client-IP
 
-		# The gateway maps the hostname to a container address; any non-2xx
-		# (unknown agent 404, not running 503) goes straight back to the visitor.
+		# The gateway maps the hostname to a container address, and rate limits,
+		# checks access keys and counts the request on the way; any non-2xx
+		# (unknown agent 404, key missing 401, limited 429, not running 503)
+		# goes straight back to the visitor. The visitor's own headers, including
+		# Authorization, are passed along.
 		forward_auth gateway:8080 {
 			uri /internal/ingress/route
 			header_up X-Agnt-Host {host}
 			header_up X-Agnt-Internal-Token {$INGRESS_TOKEN}
+			header_up X-Agnt-Client-IP {client_ip}
 			copy_headers X-Agnt-Upstream
 		}
 

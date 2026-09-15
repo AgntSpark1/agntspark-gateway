@@ -46,6 +46,13 @@ class AgentNotFoundError(NotFoundError):
         super().__init__("Agent", details={"agent_id": agent_id})
 
 
+class AccessKeyNotFoundError(NotFoundError):
+    """Raised when an agent access key id doesn't exist or belongs to another agent."""
+
+    def __init__(self, key_id: str) -> None:
+        super().__init__("Access key", details={"key_id": key_id})
+
+
 class NotImplementedStubError(AgntSparkError):
     """Raised by reserved-but-unbuilt routes."""
 
@@ -198,6 +205,7 @@ __all__ = [
     "NotFoundError",
     "ApiKeyNotFoundError",
     "AgentNotFoundError",
+    "AccessKeyNotFoundError",
     "RateLimitExceededError",
     "NotImplementedStubError",
     "BuildNotSupportedError",

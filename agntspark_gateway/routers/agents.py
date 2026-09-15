@@ -9,6 +9,7 @@ services/agent_service.py for how the two are reconciled.
 from __future__ import annotations
 
 import asyncio
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -21,10 +22,15 @@ from sse_starlette.sse import EventSourceResponse
 
 from .. import runtime as rt
 from ..db import get_db
+from ..models.agent_access_key import AgentAccessKey
 from ..schemas.agents import (
+    AccessKeyCreate,
+    AccessKeyCreateResponse,
+    AccessKeyOut,
     AgentConfigIn,
     AgentListResponse,
     AgentResponse,
+    AgentUpdate,
     DeployConfig,
     LogListResponse,
     Metrics,
@@ -32,7 +38,7 @@ from ..schemas.agents import (
     ScaleResponse,
 )
 from ..security.dependencies import Principal, get_current_principal, require_role
-from ..services import agent_service
+from ..services import access_key_service, agent_service
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 log = structlog.get_logger(__name__)
@@ -87,6 +93,61 @@ async def get_agent(
 ) -> AgentResponse:
     agent = await agent_service.get_agent(db, user_id=principal.user_id, agent_id=agent_id)
     return agent_service.to_agent_response(agent)
+
+
+@router.patch("/{agent_id}", response_model=AgentResponse)
+async def update_agent(
+    agent_id: str,
+    body: AgentUpdate,
+    principal: Principal = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),
+) -> AgentResponse:
+    agent = await agent_service.update_agent(
+        db, user_id=principal.user_id, agent_id=agent_id, body=body
+    )
+    return agent_service.to_agent_response(agent)
+
+
+def _access_key_out(key: AgentAccessKey) -> AccessKeyOut:
+    return AccessKeyOut(
+        id=key.id, label=key.label, key_preview=f"{key.key_prefix}...", created_at=key.created_at
+    )
+
+
+@router.get("/{agent_id}/access-keys", response_model=list[AccessKeyOut])
+async def list_access_keys(
+    agent_id: str,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> list[AccessKeyOut]:
+    agent = await agent_service.get_agent(db, user_id=principal.user_id, agent_id=agent_id)
+    keys = await access_key_service.list_access_keys(db, agent_id=agent.id)
+    return [_access_key_out(k) for k in keys]
+
+
+@router.post("/{agent_id}/access-keys", response_model=AccessKeyCreateResponse, status_code=201)
+async def create_access_key(
+    agent_id: str,
+    body: AccessKeyCreate | None = None,
+    principal: Principal = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),
+) -> AccessKeyCreateResponse:
+    agent = await agent_service.get_agent(db, user_id=principal.user_id, agent_id=agent_id)
+    key, raw_key = await access_key_service.create_access_key(
+        db, agent=agent, label=(body or AccessKeyCreate()).label
+    )
+    return AccessKeyCreateResponse(**_access_key_out(key).model_dump(), key=raw_key)
+
+
+@router.delete("/{agent_id}/access-keys/{key_id}", status_code=204)
+async def delete_access_key(
+    agent_id: str,
+    key_id: uuid.UUID,
+    principal: Principal = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    agent = await agent_service.get_agent(db, user_id=principal.user_id, agent_id=agent_id)
+    await access_key_service.delete_access_key(db, agent_id=agent.id, key_id=key_id)
 
 
 @router.delete("/{agent_id}", status_code=204)

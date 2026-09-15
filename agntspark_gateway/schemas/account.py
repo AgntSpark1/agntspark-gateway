@@ -18,6 +18,7 @@ class PlanLimitsOut(BaseModel):
     max_memory_mb: int
     max_replica_cpu: float
     max_replica_memory_mb: int
+    max_agent_rpm: int
 
 
 class UsageOut(BaseModel):
@@ -34,6 +35,8 @@ class PeriodUsageOut(BaseModel):
     replica_hours: float
     vcpu_hours: float
     memory_gb_hours: float
+    # Requests the edge routed to the account's agents.
+    requests: int
 
 
 class AccountUsage(BaseModel):

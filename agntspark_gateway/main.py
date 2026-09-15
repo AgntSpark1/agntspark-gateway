@@ -13,9 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import runtime as rt
 from .config import settings
+from .db import AsyncSessionLocal
 from .error_handlers import register_error_handlers
 from .routers import account, admin, agents, api_keys, auth, billing, health, ingress
 from .scheduler import run_scheduler_loop
+from .services import metering_service
 
 log = structlog.get_logger(__name__)
 
@@ -32,6 +34,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await scheduler_task
+        # Don't lose the requests counted since the last tick to a restart.
+        try:
+            async with AsyncSessionLocal() as db:
+                await metering_service.flush_requests(db)
+        except Exception as exc:
+            log.warning("shutdown: flushing request counts failed", error=str(exc))
 
 
 def create_app() -> FastAPI:
