@@ -8,6 +8,7 @@ agntspark-sdk's ``Client._handle_error`` already parses (it reads
 
 from __future__ import annotations
 
+import structlog
 from agntspark_core.exceptions import AgntSparkError, AuthenticationError, AuthorisationError
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -28,6 +29,8 @@ from .exceptions import (
     RateLimitExceededError,
     RegistrationClosedError,
 )
+
+log = structlog.get_logger(__name__)
 
 _STATUS_MAP: dict[type[AgntSparkError], int] = {
     AuthenticationError: status.HTTP_401_UNAUTHORIZED,
@@ -84,9 +87,32 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     )
 
 
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Same envelope as every other error, never the exception's text (it can
+    # carry SQL, paths or secrets); the request id ties the reply to the log.
+    request_id = getattr(request.state, "request_id", None)
+    log.error(
+        "unhandled error",
+        method=request.method,
+        path=request.url.path,
+        request_id=request_id,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "code": "INTERNAL_ERROR",
+            "message": "Something went wrong on our side. Please try again.",
+            "details": {"request_id": request_id},
+        },
+        headers={"X-Request-ID": request_id} if request_id else None,
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AgntSparkError, agntspark_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.add_exception_handler(Exception, unhandled_error_handler)
 
 
 __all__ = ["register_error_handlers"]
