@@ -16,9 +16,23 @@ from ..config import settings
 from ..exceptions import AuthenticationError
 
 ISSUER = "agntspark-gateway"
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
-def create_access_token(*, user_id: uuid.UUID, email: str, role: int) -> tuple[str, int]:
+def password_stamp(password_changed_at: datetime | None) -> int:
+    """The ``pwd`` claim: when the password last changed, in microseconds.
+
+    A session is valid only while it matches the account's current value, so
+    changing the password ends every session issued before. 0 = never changed.
+    """
+    if password_changed_at is None:
+        return 0
+    return (password_changed_at - _EPOCH) // timedelta(microseconds=1)
+
+
+def create_access_token(
+    *, user_id: uuid.UUID, email: str, role: int, password_changed_at: datetime | None = None
+) -> tuple[str, int]:
     """Returns (token, expires_in_seconds)."""
     now = datetime.now(UTC)
     expires_in = settings.jwt_expire_minutes * 60
@@ -30,6 +44,7 @@ def create_access_token(*, user_id: uuid.UUID, email: str, role: int) -> tuple[s
         "iat": now,
         "exp": now + timedelta(seconds=expires_in),
         "jti": str(uuid.uuid4()),
+        "pwd": password_stamp(password_changed_at),
     }
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return token, expires_in
@@ -47,4 +62,4 @@ def decode_access_token(token: str) -> dict[str, Any]:
         raise AuthenticationError("Invalid or expired token.") from exc
 
 
-__all__ = ["create_access_token", "decode_access_token"]
+__all__ = ["create_access_token", "decode_access_token", "password_stamp"]

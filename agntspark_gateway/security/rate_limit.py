@@ -51,4 +51,18 @@ async def enforce_login_rate_limit(request: Request) -> None:
     await _enforce(f"ratelimit:login:{client_ip}")
 
 
-__all__ = ["enforce_login_rate_limit"]
+async def enforce_password_reset_rate_limit(request: Request) -> None:
+    client_ip = request.client.host if request.client else "unknown"
+    await _enforce(f"ratelimit:password-reset:{client_ip}")
+
+
+async def enforce_reset_email_rate_limit(email: str) -> None:
+    """So nobody can flood one mailbox with reset emails from many IPs."""
+    await _enforce(f"ratelimit:password-reset-email:{email.lower()}")
+
+
+__all__ = [
+    "enforce_login_rate_limit",
+    "enforce_password_reset_rate_limit",
+    "enforce_reset_email_rate_limit",
+]

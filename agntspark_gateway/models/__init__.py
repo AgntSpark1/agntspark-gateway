@@ -2,7 +2,8 @@ from .agent import Agent
 from .agent_access_key import AgentAccessKey
 from .api_key import ApiKey
 from .invite import Invite
+from .password_reset_token import PasswordResetToken
 from .usage_hour import UsageHour
 from .user import User
 
-__all__ = ["User", "ApiKey", "Agent", "AgentAccessKey", "Invite", "UsageHour"]
+__all__ = ["User", "ApiKey", "Agent", "AgentAccessKey", "Invite", "PasswordResetToken", "UsageHour"]

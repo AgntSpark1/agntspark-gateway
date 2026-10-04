@@ -1,8 +1,8 @@
-"""POST /v1/auth/register, POST /v1/auth/login, GET /v1/auth/me."""
+"""POST /v1/auth/register, POST /v1/auth/login, GET /v1/auth/me, and passwords."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
@@ -12,14 +12,22 @@ from ..models.user import User
 from ..roles import role_to_str
 from ..schemas.auth import (
     LoginRequest,
+    PasswordChange,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     RegisterRequest,
     RegistrationInfo,
     TokenResponse,
     UserOut,
 )
-from ..security.dependencies import Principal, get_current_principal
+from ..security.dependencies import Principal, get_current_principal, require_jwt_principal
 from ..security.jwt import create_access_token
-from ..security.rate_limit import enforce_login_rate_limit
+from ..security.rate_limit import (
+    enforce_login_rate_limit,
+    enforce_password_reset_rate_limit,
+    enforce_reset_email_rate_limit,
+)
+from ..services import password_service
 from ..services.auth_service import authenticate_user, register_user
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -36,7 +44,12 @@ def _user_out(user: User) -> UserOut:
 
 
 def _token_response(user: User) -> TokenResponse:
-    token, expires_in = create_access_token(user_id=user.id, email=user.email, role=user.role)
+    token, expires_in = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role,
+        password_changed_at=user.password_changed_at,
+    )
     return TokenResponse(
         access_token=token,
         expires_in=expires_in,
@@ -86,3 +99,47 @@ async def me(
         # between authentication and this lookup — vanishingly rare.
         raise AuthenticationError("Invalid or expired token.")
     return _user_out(user)
+
+
+@router.post(
+    "/password-reset",
+    status_code=202,
+    dependencies=[Depends(enforce_password_reset_rate_limit)],
+)
+async def request_password_reset(
+    body: PasswordResetRequest, db: AsyncSession = Depends(get_db)
+) -> dict[str, str]:
+    """Emails a reset link when the address has an account. The reply is the
+    same either way, so it can't be used to find out who has one."""
+    await enforce_reset_email_rate_limit(body.email)
+    await password_service.request_reset(db, email=body.email)
+    return {"status": "sent"}
+
+
+@router.post(
+    "/password-reset/confirm",
+    status_code=204,
+    dependencies=[Depends(enforce_password_reset_rate_limit)],
+)
+async def confirm_password_reset(
+    body: PasswordResetConfirm, db: AsyncSession = Depends(get_db)
+) -> Response:
+    await password_service.confirm_reset(db, token=body.token, password=body.password)
+    return Response(status_code=204)
+
+
+@router.post("/password", response_model=TokenResponse)
+async def change_password(
+    body: PasswordChange,
+    principal: Principal = Depends(require_jwt_principal),
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Changes the password and signs out every other session; the reply
+    carries a fresh token for this one."""
+    user = await db.get(User, principal.user_id)
+    if user is None:
+        raise AuthenticationError("Invalid or expired token.")
+    await password_service.change_password(
+        db, user=user, current_password=body.current_password, new_password=body.new_password
+    )
+    return _token_response(user)

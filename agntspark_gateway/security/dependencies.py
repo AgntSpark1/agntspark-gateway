@@ -25,7 +25,7 @@ from ..exceptions import AuthenticationError, AuthorisationError
 from ..models.api_key import ApiKey
 from ..models.user import User
 from .api_keys import hash_key
-from .jwt import decode_access_token
+from .jwt import decode_access_token, password_stamp
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -70,6 +70,9 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> Principal:
 
     user = await db.get(User, user_id)
     if user is None or not user.is_active:
+        raise AuthenticationError("Invalid or expired token.")
+    if payload.get("pwd", 0) != password_stamp(user.password_changed_at):
+        # Issued before the password last changed.
         raise AuthenticationError("Invalid or expired token.")
 
     return Principal(user_id=user.id, email=user.email, role=user.role_enum, auth_method="jwt")
