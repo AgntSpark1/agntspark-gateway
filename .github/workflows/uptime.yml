@@ -1,0 +1,35 @@
+# Checks production from outside every 10 minutes. A failed run is the alert:
+# GitHub emails whoever last changed this schedule (Settings → Notifications →
+# Actions on their account controls it), and the Actions tab shows the history.
+#
+# readyz answers 200 only when the gateway can reach its database; the console
+# check catches a broken Caddy or a missing console build.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.repository == 'AgntSpark1/agntspark-gateway'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: API is ready
+        run: |
+          curl -fsS --max-time 10 --retry 3 --retry-delay 20 --retry-all-errors \
+            https://agntapi.agntspark.com/readyz
+
+      - name: Console loads
+        run: |
+          curl -fsS --max-time 10 --retry 3 --retry-delay 20 --retry-all-errors \
+            -o /dev/null https://agntapi.agntspark.com/

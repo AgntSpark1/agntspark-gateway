@@ -76,3 +76,49 @@ def test_unsafe_production_config_is_refused(overrides: dict[str, str], fragment
 
 def test_development_is_never_refused() -> None:
     assert production_config_problems(GatewaySettings(_env_file=None)) == []
+
+
+async def test_readyz_reports_ready_when_the_database_answers(client: AsyncClient) -> None:
+    resp = await client.get("/readyz")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ready"}
+
+
+async def test_readyz_is_503_when_the_database_is_down() -> None:
+    from agntspark_gateway import db as db_module
+
+    class BrokenSession:
+        async def execute(self, *args: object, **kwargs: object) -> None:
+            raise ConnectionRefusedError("database is down")
+
+    async def broken_db():  # type: ignore[no-untyped-def]
+        yield BrokenSession()
+
+    app = create_app()
+    app.dependency_overrides[db_module.get_db] = broken_db
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.get("/readyz")
+
+    assert resp.status_code == 503
+    assert resp.json() == {"status": "unavailable"}
+
+
+def test_error_reporting_is_off_without_a_dsn(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agntspark_gateway import main
+    from agntspark_gateway.config import settings
+
+    monkeypatch.setattr(settings, "sentry_dsn", None)
+    assert main.init_error_reporting() is False
+
+
+def test_error_reporting_never_sends_request_bodies(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agntspark_gateway import main
+    from agntspark_gateway.config import settings
+
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(settings, "sentry_dsn", "https://key@sentry.example/1")
+    monkeypatch.setattr(main.sentry_sdk, "init", lambda **kw: calls.append(kw))
+
+    assert main.init_error_reporting() is True
+    assert calls[0]["send_default_pii"] is False
+    assert calls[0]["max_request_body_size"] == "never"

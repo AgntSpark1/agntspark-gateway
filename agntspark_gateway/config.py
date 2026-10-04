@@ -43,6 +43,10 @@ class GatewaySettings(BaseSettings):
     redis_url: str | None = None
     log_level: str = "INFO"
     environment: str = "development"
+    # Error reporting to Sentry (or a Sentry-compatible service such as
+    # GlitchTip). Unset disables it.
+    sentry_dsn: str | None = None
+    sentry_traces_sample_rate: float = 0.0
 
     # Agent Runtime / Control Plane
     docker_socket: str = "unix:///var/run/docker.sock"
