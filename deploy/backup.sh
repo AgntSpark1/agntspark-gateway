@@ -18,7 +18,13 @@
 #
 # Remote copies are kept R2_KEEP_DAYS (default 30). Fetch one with
 # `rclone copy r2:<bucket>/<file> .` using the same credentials.
-set -euo pipefail
+#
+# Every archive is test-restored into a scratch database before it counts:
+# a backup nobody has restored is a hope, not a backup. With BACKUP_PING_URL
+# in .env (a healthchecks.io-style check, e.g. https://hc-ping.com/<uuid>),
+# success pings that URL and any failure pings <url>/fail, so a backup that
+# fails or silently stops running raises an alert.
+set -Eeuo pipefail
 umask 077
 
 BASE=/opt/agntspark
@@ -30,12 +36,39 @@ env_value() {
   sed -n "s/^$1=//p" "$BASE/.env" | tail -1
 }
 
+ping_url=$(env_value BACKUP_PING_URL)
+ping() {
+  [ -n "$ping_url" ] || return 0
+  curl -fsS -m 10 --retry 3 -o /dev/null "$ping_url$1" || echo "ping $ping_url$1 failed"
+}
+trap 'ping /fail' ERR
+
+compose() {
+  docker compose --env-file "$BASE/.env" -f docker-compose.prod.yml "$@"
+}
+
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 target="$DEST/agntspark_gateway-$stamp.dump"
 
 cd "$BASE/agntspark-gateway/deploy"
-docker compose --env-file "$BASE/.env" -f docker-compose.prod.yml exec -T postgres \
+compose exec -T postgres \
   pg_dump -U agntspark -d agntspark_gateway --format=custom > "$target.partial"
+
+# Restore it into a scratch database and make sure the data came back.
+scratch=agntspark_restore_check
+compose exec -T postgres dropdb -U agntspark --if-exists "$scratch"
+compose exec -T postgres createdb -U agntspark "$scratch"
+compose exec -T postgres pg_restore -U agntspark -d "$scratch" --no-owner --exit-on-error \
+  < "$target.partial"
+restored_users=$(compose exec -T postgres psql -U agntspark -d "$scratch" -tAc 'SELECT count(*) FROM users')
+live_users=$(compose exec -T postgres psql -U agntspark -d agntspark_gateway -tAc 'SELECT count(*) FROM users')
+compose exec -T postgres dropdb -U agntspark "$scratch"
+# Accounts created during the dump may be missing from it, never the reverse.
+if [ "$restored_users" -gt "$live_users" ] || { [ "$live_users" -gt 0 ] && [ "$restored_users" -eq 0 ]; }; then
+  echo "restore check failed: $restored_users users restored, $live_users live" >&2
+  false
+fi
+echo "restore check passed: $restored_users users"
 mv "$target.partial" "$target"
 
 find "$DEST" -name 'agntspark_gateway-*.dump' -mtime +"$KEEP_DAYS" -delete
@@ -46,6 +79,7 @@ r2_account=$(env_value R2_ACCOUNT_ID)
 r2_bucket=$(env_value R2_BUCKET)
 if [ -z "$r2_account" ] || [ -z "$r2_bucket" ]; then
   echo "off-host copy skipped: R2_ACCOUNT_ID / R2_BUCKET not set"
+  ping ""
   exit 0
 fi
 
@@ -71,3 +105,4 @@ rclone() {
 rclone copy "/backups/$(basename "$target")" "r2:$r2_bucket/"
 rclone delete --min-age "${remote_keep_days:-30}d" "r2:$r2_bucket/"
 echo "off-host copy uploaded to r2:$r2_bucket"
+ping ""

@@ -115,3 +115,12 @@ def test_caddy_address_is_the_one_isolation_allows() -> None:
     assert caddy_ip
     unit = (DEPLOY / "agntspark-isolate-agents.service").read_text()
     assert set(re.findall(r"-[sd] (\S+)", unit)) == {caddy_ip.group(1)}
+
+
+def test_backups_are_test_restored_and_report_failures() -> None:
+    script = (DEPLOY / "backup.sh").read_text()
+    # errtrace: without -E the ERR trap misses failures inside functions.
+    assert "set -Eeuo pipefail" in script
+    assert "trap 'ping /fail' ERR" in script
+    # The archive only gets its final name after the restore check passed.
+    assert script.index("pg_restore") < script.index('mv "$target.partial" "$target"')

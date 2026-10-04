@@ -81,7 +81,10 @@ template, local to the host) and restart. It also hardens the host:
   `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and
   `R2_SECRET_ACCESS_KEY` are in `.env`, each archive is also copied to that
   Cloudflare R2 bucket (kept `R2_KEEP_DAYS`, default 30), so a lost VM
-  doesn't take the backups with it.
+  doesn't take the backups with it. Each archive is first restored into a
+  scratch database and checked before it's kept. Put a healthchecks.io
+  (or compatible) URL in `BACKUP_PING_URL` to be alerted when a backup
+  fails or stops running.
 
 Secrets are generated once into `/opt/agntspark/.env` (mode 600). **Back
 up `SECRET_ENCRYPTION_KEY`** — losing it makes every stored agent secret
