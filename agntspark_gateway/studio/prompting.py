@@ -30,7 +30,8 @@ def build_system_prompt(assistant: Assistant, passages: list[tuple[str, str]]) -
         )
     parts.append(
         "You are chatting with someone through a chat window, so write plain conversational "
-        "text with little formatting."
+        "text with little formatting. Reply in the language the person writes in, even when "
+        "these instructions or the knowledge are in another language."
     )
     return "\n\n".join(parts)
 

@@ -107,6 +107,22 @@ class TestAssistants:
         listed = (await client.get("/v1/studio/assistants", headers=headers)).json()
         assert [x["id"] for x in listed] == [a["id"]]
 
+    async def test_create_keeps_a_greeting_in_the_owners_language(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        headers = await _login(client, db_session, "greet@studio.agntspark.com")
+        resp = await client.post(
+            "/v1/studio/assistants",
+            json={
+                "template": "customer-support",
+                "name": "阳光烘焙",
+                "greeting": "你好！有什么可以帮你？",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        assert resp.json()["greeting"] == "你好！有什么可以帮你？"
+
     async def test_unknown_template_is_rejected(
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
@@ -205,6 +221,8 @@ class TestKnowledge:
         assert "We are a bakery in Austin." in system
         assert '<document title="Delivery">' in system
         assert "free for orders over $40" in system
+        # Visitors write in their own language; the reply follows them, not the owner's.
+        assert "Reply in the language the person writes in" in system
 
     async def test_large_knowledge_retrieves_matching_passages(
         self, client: AsyncClient, db_session: AsyncSession, model: FakeModel
