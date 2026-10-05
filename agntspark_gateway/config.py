@@ -65,6 +65,17 @@ class GatewaySettings(BaseSettings):
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     secret_encryption_key: str = "Jyw3CWB_wTCDeOw8q_dNNJin6tfrQLnltmnRf0UB2T0="
 
+    # Studio: no-code assistants built from templates, run in-process on the
+    # platform's own model key (agntspark_gateway/studio). Unset key disables
+    # chatting; everything else (building, publishing) still works.
+    studio_anthropic_api_key: str | None = None
+    studio_model: str = "claude-opus-5-5"
+    # low keeps chat replies quick and cheap; raise it for harder templates.
+    studio_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+    studio_max_output_tokens: int = 2048
+    # Requests per minute one visitor IP may send a public assistant.
+    studio_public_rpm_per_ip: int = 20
+
 
 settings = GatewaySettings()
 

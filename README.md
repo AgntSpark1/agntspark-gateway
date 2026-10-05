@@ -166,6 +166,18 @@ Certificates (`AGENT_TLS`, written to `.env` by `bootstrap.sh`):
 | `GET /v1/agents/{id}/logs/stream` | Bearer | SSE, polls every 2s |
 | `GET /v1/agents/{id}/metrics` | Bearer | live CPU/memory from Docker stats |
 | `GET /v1/agents/{id}/metrics/stream` | Bearer | SSE, polls every `interval`s (min 5) |
+| `GET /v1/studio/templates` | none | templates a builder starts from |
+| `GET /v1/studio/usage` | Bearer | replies used this month vs the plan's allowance, assistant and knowledge counts, `chat_available` |
+| `POST /v1/studio/assistants` | Bearer | `{template,name,instructions?,greeting?}`; starts unpublished |
+| `GET /v1/studio/assistants` | Bearer | list caller's own assistants |
+| `GET/PATCH/DELETE /v1/studio/assistants/{id}` | Bearer | `PATCH {name?,instructions?,greeting?,is_public?}`; `is_public: true` publishes it |
+| `GET/POST /v1/studio/assistants/{id}/documents` | Bearer | knowledge: `POST {title,content}` (plain text, up to 200k chars) |
+| `DELETE /v1/studio/assistants/{id}/documents/{doc_id}` | Bearer | remove a document |
+| `POST /v1/studio/assistants/{id}/chat` | Bearer | owner's test chat: `{message,conversation_id?}` → `{conversation_id,reply}` |
+| `GET /v1/studio/assistants/{id}/conversations[/{cid}]` | Bearer | every conversation (test and public), newest first, and one in full |
+| `GET /v1/public/assistants/{slug}` | none | a published assistant's name and greeting |
+| `POST /v1/public/assistants/{slug}/chat` | none | visitor chat, rate limited per visitor IP; counts against the owner's allowance |
+| `GET /v1/public/assistants/{slug}/conversations/{cid}` | none | the visitor's own conversation (the random id is the credential) |
 | `GET /metrics` | none | Prometheus scrape endpoint (platform-wide, not per-agent; blocked at the edge in production) |
 
 ## Auth model
@@ -200,6 +212,17 @@ Certificates (`AGENT_TLS`, written to `.env` by `bootstrap.sh`):
   buckets (`requests`) on each tick and at shutdown; a crash loses at most
   one interval's count. `GET /v1/account/usage` includes this month's
   replica-, vCPU- and memory-GB-hours and requests under `period`.
+- **Studio** (`agntspark_gateway/studio`, `services/studio_service.py`):
+  no-code assistants for non-technical builders. An assistant is a template
+  (`studio/templates.py`), the owner's instructions and uploaded knowledge; it
+  has no container. The gateway answers its chats in-process on the
+  platform's own Anthropic key (`AGNTSPARK_GATEWAY_STUDIO_ANTHROPIC_API_KEY`,
+  model `..._STUDIO_MODEL`), finds relevant knowledge with Postgres full-text
+  search (a small knowledge base is sent whole), and stores every
+  conversation. Plans sell replies: `studio/limits.py` sets each plan's
+  monthly reply allowance, assistant count and knowledge size, and a reply
+  past the allowance is refused (403 `QUOTA_EXCEEDED`), never billed later.
+  Without a key, chat returns 503 `STUDIO_NOT_CONFIGURED`.
 - **Billing** (`services/billing_service.py`, `routers/billing.py`): Stripe
   subscriptions for the `pro` plan. `POST /v1/billing/checkout` returns a
   Stripe Checkout URL (creating the Stripe customer once),

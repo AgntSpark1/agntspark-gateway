@@ -15,7 +15,18 @@ from . import runtime as rt
 from .config import settings
 from .db import AsyncSessionLocal
 from .error_handlers import register_error_handlers
-from .routers import account, admin, agents, api_keys, auth, billing, health, ingress
+from .routers import (
+    account,
+    admin,
+    agents,
+    api_keys,
+    auth,
+    billing,
+    health,
+    ingress,
+    public_chat,
+    studio,
+)
 from .scheduler import run_scheduler_loop
 from .services import metering_service
 
@@ -68,6 +79,8 @@ def create_app() -> FastAPI:
     app.include_router(billing.router)
     app.include_router(agents.router)
     app.include_router(ingress.router)
+    app.include_router(studio.router)
+    app.include_router(public_chat.router)
 
     return app
 
