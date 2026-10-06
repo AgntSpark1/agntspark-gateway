@@ -32,7 +32,10 @@ WEBHOOK_SECRET = "whsec_test_secret"
 class FakeStripe:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        # What subscriptions.retrieve returns: Stripe's current state, by id.
+        self.subscriptions: dict[str, dict[str, Any]] = {}
         self.v1 = SimpleNamespace(
+            subscriptions=SimpleNamespace(retrieve=self._retrieve_subscription),
             customers=SimpleNamespace(
                 create=self._record("customer", SimpleNamespace(id="cus_test123"))
             ),
@@ -58,6 +61,10 @@ class FakeStripe:
             return result
 
         return call
+
+    def _retrieve_subscription(self, sub_id: str, params: Any = None, options: Any = None) -> Any:
+        self.calls.append(("subscription", {"id": sub_id}))
+        return SimpleNamespace(to_dict=lambda: dict(self.subscriptions[sub_id]))
 
     def names(self) -> list[str]:
         return [name for name, _ in self.calls]
@@ -101,20 +108,35 @@ async def _post_event(
     )
 
 
+def _subscription(status: str, user_id: str, sub_id: str = "sub_1") -> dict[str, Any]:
+    return {
+        "id": sub_id,
+        "customer": "cus_test123",
+        "status": status,
+        "metadata": {"user_id": user_id},
+    }
+
+
 def _subscription_event(
     kind: str, status: str, user_id: str, sub_id: str = "sub_1"
 ) -> dict[str, Any]:
     return {
         "type": f"customer.subscription.{kind}",
-        "data": {
-            "object": {
-                "id": sub_id,
-                "customer": "cus_test123",
-                "status": status,
-                "metadata": {"user_id": user_id},
-            }
-        },
+        "data": {"object": _subscription(status, user_id, sub_id)},
     }
+
+
+async def _sync(
+    client: AsyncClient,
+    fake: FakeStripe,
+    kind: str,
+    status: str,
+    user_id: str,
+    sub_id: str = "sub_1",
+) -> Any:
+    """Stripe's side changes, then it sends the matching event."""
+    fake.subscriptions[sub_id] = _subscription(status, user_id, sub_id)
+    return await _post_event(client, _subscription_event(kind, status, user_id, sub_id))
 
 
 async def test_disabled_without_stripe_config(
@@ -192,19 +214,18 @@ async def test_subscription_lifecycle_drives_the_plan(
         body = (await client.get("/v1/billing", headers=headers)).json()
         return body["plan"], body["subscription_status"]
 
-    assert (
-        await _post_event(client, _subscription_event("created", "active", user_id))
-    ).status_code == 200
+    assert (await _sync(client, fake_stripe, "created", "active", user_id)).status_code == 200
     assert await plan() == ("pro", "active")
 
-    await _post_event(client, _subscription_event("updated", "past_due", user_id))
+    await _sync(client, fake_stripe, "updated", "past_due", user_id)
     assert await plan() == ("pro", "past_due")
 
-    # An old subscription ending doesn't downgrade the current one.
-    await _post_event(client, _subscription_event("deleted", "canceled", user_id, sub_id="sub_old"))
+    # An old subscription ending or lapsing doesn't downgrade the current one.
+    await _sync(client, fake_stripe, "deleted", "canceled", user_id, sub_id="sub_old")
+    await _sync(client, fake_stripe, "updated", "unpaid", user_id, sub_id="sub_old")
     assert await plan() == ("pro", "past_due")
 
-    await _post_event(client, _subscription_event("deleted", "canceled", user_id))
+    await _sync(client, fake_stripe, "deleted", "canceled", user_id)
     assert await plan() == ("free", "canceled")
 
     again = await client.post("/v1/billing/checkout", headers=headers)
@@ -217,7 +238,7 @@ async def test_active_subscribers_are_sent_to_the_portal(
     headers = await _login(client, db_session, "subscribed@agntspark.com")
     user_id = (await client.get("/v1/auth/me", headers=headers)).json()["id"]
     await client.post("/v1/billing/checkout", headers=headers)
-    await _post_event(client, _subscription_event("created", "active", user_id))
+    await _sync(client, fake_stripe, "created", "active", user_id)
 
     resp = await client.post("/v1/billing/checkout", headers=headers)
     assert resp.status_code == 409
@@ -227,8 +248,24 @@ async def test_active_subscribers_are_sent_to_the_portal(
 async def test_events_for_unknown_customers_are_ignored(
     client: AsyncClient, fake_stripe: FakeStripe
 ) -> None:
-    event = {
-        "type": "customer.subscription.updated",
-        "data": {"object": {"id": "sub_x", "customer": "cus_nobody", "status": "active"}},
-    }
+    sub = {"id": "sub_x", "customer": "cus_nobody", "status": "active"}
+    fake_stripe.subscriptions["sub_x"] = sub
+    event = {"type": "customer.subscription.updated", "data": {"object": sub}}
     assert (await _post_event(client, event)).status_code == 200
+
+
+async def test_late_events_apply_the_current_subscription_state(
+    client: AsyncClient, db_session: AsyncSession, fake_stripe: FakeStripe
+) -> None:
+    """Stripe doesn't order events: a stale "created" (incomplete) arriving
+    after the payment went through must not drop a paying customer to free."""
+    headers = await _login(client, db_session, "late@agntspark.com")
+    user_id = (await client.get("/v1/auth/me", headers=headers)).json()["id"]
+    await client.post("/v1/billing/checkout", headers=headers)
+
+    await _sync(client, fake_stripe, "updated", "active", user_id)
+    stale = await _post_event(client, _subscription_event("created", "incomplete", user_id))
+
+    assert stale.status_code == 200
+    body = (await client.get("/v1/billing", headers=headers)).json()
+    assert (body["plan"], body["subscription_status"]) == ("pro", "active")
