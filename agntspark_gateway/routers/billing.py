@@ -89,5 +89,6 @@ async def webhook(
     except (ValueError, stripe.SignatureVerificationError) as exc:
         raise InvalidWebhookError() from exc
     # Verified above; parse the raw JSON rather than depend on StripeObject's shape.
-    await billing_service.handle_event(db, json.loads(payload))
+    client = get_stripe_client() if billing_enabled() else None
+    await billing_service.handle_event(db, json.loads(payload), client)
     return {"received": True}
