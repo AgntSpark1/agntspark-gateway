@@ -102,8 +102,28 @@ async def _find_user(
     return None
 
 
-async def handle_event(db: AsyncSession, event: dict[str, Any]) -> None:
-    """Apply a verified Stripe event. Unknown events and customers are ignored."""
+async def _current_subscription(client: StripeClient | None, obj: dict[str, Any]) -> dict[str, Any]:
+    """The subscription as Stripe has it now, not as it was when the event fired.
+
+    Stripe doesn't deliver events in order and retries failed ones for days, so
+    a late ``customer.subscription.created`` (status ``incomplete``) could
+    otherwise land after the payment went through and drop a paying customer
+    to free. A Stripe error propagates, so the webhook fails and Stripe retries.
+    """
+    if client is None or not obj.get("id"):
+        return obj
+    subscription = await asyncio.to_thread(client.v1.subscriptions.retrieve, obj["id"])
+    return dict(subscription.to_dict())
+
+
+async def handle_event(
+    db: AsyncSession, event: dict[str, Any], client: StripeClient | None = None
+) -> None:
+    """Apply a verified Stripe event. Unknown events and customers are ignored.
+
+    With ``client``, subscription events are applied from the subscription's
+    current state fetched from Stripe rather than the event's snapshot.
+    """
     event_type = event.get("type", "")
     obj = event.get("data", {}).get("object", {})
 
@@ -128,6 +148,8 @@ async def handle_event(db: AsyncSession, event: dict[str, Any]) -> None:
         "customer.subscription.updated",
         "customer.subscription.deleted",
     ):
+        if event_type != "customer.subscription.deleted":
+            obj = await _current_subscription(client, obj)
         user = await _find_user(
             db,
             user_id=(obj.get("metadata") or {}).get("user_id"),
@@ -137,14 +159,14 @@ async def handle_event(db: AsyncSession, event: dict[str, Any]) -> None:
             log.warning("billing: event for unknown customer", event_type=event_type)
             return
         subscription_id = obj.get("id")
-        if (
-            event_type == "customer.subscription.deleted"
-            and user.stripe_subscription_id
-            and subscription_id != user.stripe_subscription_id
-        ):
-            # An old subscription ending doesn't affect the current one.
-            return
         status = "canceled" if event_type == "customer.subscription.deleted" else obj.get("status")
+        if (
+            user.stripe_subscription_id
+            and subscription_id != user.stripe_subscription_id
+            and status not in PAID_STATUSES
+        ):
+            # An old subscription ending or lapsing doesn't affect the current one.
+            return
         user.stripe_customer_id = obj.get("customer") or user.stripe_customer_id
         user.stripe_subscription_id = subscription_id
         user.subscription_status = status
