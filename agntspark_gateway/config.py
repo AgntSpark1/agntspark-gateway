@@ -43,6 +43,10 @@ class GatewaySettings(BaseSettings):
     redis_url: str | None = None
     log_level: str = "INFO"
     environment: str = "development"
+    # Error reporting to Sentry (or a Sentry-compatible service such as
+    # GlitchTip). Unset disables it.
+    sentry_dsn: str | None = None
+    sentry_traces_sample_rate: float = 0.0
 
     # Agent Runtime / Control Plane
     docker_socket: str = "unix:///var/run/docker.sock"
@@ -66,6 +70,29 @@ class GatewaySettings(BaseSettings):
     secret_encryption_key: str = "Jyw3CWB_wTCDeOw8q_dNNJin6tfrQLnltmnRf0UB2T0="
 
 
+_DEFAULT_SECRET_ENCRYPTION_KEY = GatewaySettings.model_fields["secret_encryption_key"].default
+_DEFAULT_JWT_SECRETS = frozenset({"dev-secret-change-me", "change-me-in-production"})
+
+
+def production_config_problems(cfg: GatewaySettings) -> list[str]:
+    """What makes ``cfg`` unsafe to serve real users with; empty when fine.
+
+    Only enforced when ``environment`` is ``production``: the defaults above
+    are public (they're in this file), so a production gateway that silently
+    fell back to them would accept forged tokens and decrypt nothing safely.
+    """
+    if cfg.environment != "production":
+        return []
+    problems = []
+    if cfg.jwt_secret in _DEFAULT_JWT_SECRETS or len(cfg.jwt_secret) < 32:
+        problems.append("JWT_SECRET is a default or shorter than 32 characters")
+    if cfg.secret_encryption_key in (_DEFAULT_SECRET_ENCRYPTION_KEY, "change-me-in-production"):
+        problems.append("SECRET_ENCRYPTION_KEY is the built-in development key")
+    if cfg.stripe_secret_key and not cfg.stripe_webhook_secret:
+        problems.append("STRIPE_SECRET_KEY is set without STRIPE_WEBHOOK_SECRET")
+    return problems
+
+
 settings = GatewaySettings()
 
-__all__ = ["GatewaySettings", "settings"]
+__all__ = ["GatewaySettings", "production_config_problems", "settings"]

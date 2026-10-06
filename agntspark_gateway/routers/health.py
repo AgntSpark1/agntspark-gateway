@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import structlog
 from agntspark_core import metrics as core_metrics
 from fastapi import APIRouter, Depends
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["health"])
 
@@ -19,9 +22,15 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/readyz")
-async def readyz(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
-    await db.execute(text("SELECT 1"))
+@router.get("/readyz", response_model=None)
+async def readyz(db: AsyncSession = Depends(get_db)) -> dict[str, str] | JSONResponse:
+    """Ready = can reach the database. Uptime checks and the deploy smoke test
+    use this rather than /healthz, which only shows the process is up."""
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        log.warning("readyz: database unreachable", error=str(exc))
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
     return {"status": "ready"}
 
 

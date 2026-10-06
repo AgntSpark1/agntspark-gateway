@@ -295,6 +295,26 @@ See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"
   (`observability/grafana-datasource.yml`) and anonymous viewer access
   for local dev — no dashboards are pre-built yet, build them in the
   Grafana UI against the `agntspark_*` metric names above.
+- **Logs and request ids** (`observability.py`): every response carries
+  `X-Request-ID` (the caller's when it's 1–64 safe characters, otherwise a
+  new one), bound to every log line for that request, with one access log
+  line each (`/healthz`, `/readyz`, `/metrics` excepted). With
+  `ENVIRONMENT=production` logs are one JSON object per line
+  (`docker compose logs gateway | jq`). Unhandled errors return
+  `500 {"code": "INTERNAL_ERROR", "details": {"request_id": ...}}`, so a
+  user's report can be matched to the log line, never the exception text.
+- **Production config guard**: with `ENVIRONMENT=production` the gateway
+  refuses to start on the public default `JWT_SECRET` or
+  `SECRET_ENCRYPTION_KEY`, or with Stripe configured but no webhook secret.
+- **Readiness**: `GET /readyz` is 200 only when the database answers (503
+  otherwise) and is served at the edge, unlike `/metrics`. The deploy smoke
+  test uses it.
+- **Uptime** (`.github/workflows/uptime.yml`): every 10 minutes GitHub
+  Actions checks `/readyz` and that the console loads. A failed run is the
+  alert: GitHub emails whoever last edited that schedule.
+- **Error reporting**: set `SENTRY_DSN` in `/opt/agntspark/.env` (Sentry or
+  a self-hosted GlitchTip) and unhandled errors are reported there with
+  their stack trace. Request bodies and personal data are never sent.
 - **Deliberately not built**: Jaeger (distributed tracing) and an ELK/log-
   aggregation stack. There's one service to trace today (no inter-service
   request chains yet) and Docker's own log buffer plus `/logs` already

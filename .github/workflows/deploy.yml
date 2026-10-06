@@ -64,4 +64,4 @@ jobs:
         if: steps.secrets.outputs.configured == 'true'
         run: |
           curl -fsS --retry 10 --retry-delay 6 --retry-all-errors \
-            https://agntapi.agntspark.com/healthz
+            https://agntapi.agntspark.com/readyz
