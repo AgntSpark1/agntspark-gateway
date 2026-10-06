@@ -143,6 +143,9 @@ Certificates (`AGENT_TLS`, written to `.env` by `bootstrap.sh`):
 | `GET /v1/auth/registration` | none | `{mode}`: `open`, `invite` (register needs `invite_code`) or `closed` |
 | `POST /v1/auth/login` | none | `{email,password}` → JWT |
 | `GET /v1/auth/me` | Bearer (JWT or key) | current user |
+| `POST /v1/auth/password-reset` | none | `{email}` → 202 either way; emails a reset link when the account exists |
+| `POST /v1/auth/password-reset/confirm` | none | `{token,password}` → 204; the link works once, for 30 min |
+| `POST /v1/auth/password` | JWT only | `{current_password,new_password}` → fresh JWT; other sessions end |
 | `POST /v1/api-keys` | JWT only | mint a new API key (raw value shown once) |
 | `GET /v1/api-keys` | Bearer | list caller's own keys |
 | `DELETE /v1/api-keys/{id}` | Bearer | revoke a key |
@@ -210,6 +213,18 @@ Certificates (`AGENT_TLS`, written to `.env` by `bootstrap.sh`):
   `AGNTSPARK_GATEWAY_STRIPE_SECRET_KEY` and `..._STRIPE_PRICE_PRO` are set;
   the webhook also needs `..._STRIPE_WEBHOOK_SECRET`. Downgrading doesn't stop
   running agents — quotas only refuse new work.
+
+- **Passwords** (`services/password_service.py`): a forgotten password is
+  reset through an emailed link (`<public_base_url>/reset-password?token=…`,
+  stored as SHA-256, single use, `..._PASSWORD_RESET_TTL_MINUTES`, default
+  30). The request endpoint answers the same whether or not the address has
+  an account, and is rate limited per IP and per address. Resetting or
+  changing a password ends every existing session: JWTs carry a `pwd` claim
+  that must match `users.password_changed_at`. API keys keep working.
+  Email goes over SMTP (`services/email_service.py`, `..._SMTP_HOST`,
+  `_PORT`, `_USERNAME`, `_PASSWORD`, `..._EMAIL_FROM`); for Resend use
+  `smtp.resend.com`, port 587, username `resend` and the API key as the
+  password. Without `SMTP_HOST` nothing is sent and a warning is logged.
 
 See `agntspark_gateway/roles.py` for the `Role` (core) ↔ `"viewer"/"developer"/"admin"`
 (console) string mapping.

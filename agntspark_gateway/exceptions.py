@@ -186,6 +186,27 @@ class InviteNotFoundError(NotFoundError):
         super().__init__("Invite", details={"invite_id": invite_id})
 
 
+class InvalidResetTokenError(AgntSparkError):
+    """Raised when a password reset link is unknown, used or expired."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "This password reset link is invalid or has expired. Request a new one.",
+            code="INVALID_RESET_TOKEN",
+        )
+
+
+class WrongPasswordError(AgntSparkError):
+    """Raised when changing a password with the wrong current password.
+
+    A 400, not a 401: the session itself is fine, and a 401 would log the
+    console out.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("Current password is incorrect.", code="WRONG_PASSWORD")
+
+
 class DeploymentFailedError(AgntSparkError):
     """Raised when the underlying container runtime fails to deploy/scale an agent."""
 

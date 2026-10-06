@@ -21,12 +21,14 @@ from .exceptions import (
     DeploymentFailedError,
     EmailAlreadyRegisteredError,
     InvalidInviteError,
+    InvalidResetTokenError,
     InvalidWebhookError,
     NotFoundError,
     NotImplementedStubError,
     QuotaExceededError,
     RateLimitExceededError,
     RegistrationClosedError,
+    WrongPasswordError,
 )
 
 _STATUS_MAP: dict[type[AgntSparkError], int] = {
@@ -35,6 +37,8 @@ _STATUS_MAP: dict[type[AgntSparkError], int] = {
     InvalidInviteError: status.HTTP_403_FORBIDDEN,
     QuotaExceededError: status.HTTP_403_FORBIDDEN,
     InvalidWebhookError: status.HTTP_400_BAD_REQUEST,
+    InvalidResetTokenError: status.HTTP_400_BAD_REQUEST,
+    WrongPasswordError: status.HTTP_400_BAD_REQUEST,
     BillingConflictError: status.HTTP_409_CONFLICT,
     BillingNotConfiguredError: status.HTTP_503_SERVICE_UNAVAILABLE,
     RegistrationClosedError: status.HTTP_403_FORBIDDEN,

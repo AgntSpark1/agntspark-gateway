@@ -37,8 +37,21 @@ class GatewaySettings(BaseSettings):
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
     stripe_price_pro: str | None = None
-    # The console's public URL, where Stripe sends people back to.
+    # The console's public URL, where Stripe sends people back to and
+    # password reset links point.
     public_base_url: str = "http://localhost:5173"
+
+    # Outgoing email over SMTP (password reset). Unset smtp_host disables
+    # sending. Resend: host smtp.resend.com, port 587, username "resend",
+    # password = the API key; any other SMTP provider works the same way.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    # STARTTLS on smtp_port (587); set false only for a local test relay.
+    smtp_starttls: bool = True
+    email_from: str = "AgntSpark <no-reply@agntspark.com>"
+    password_reset_ttl_minutes: int = 30
     cors_allow_origins: list[str] = ["http://localhost:5173"]
     redis_url: str | None = None
     log_level: str = "INFO"
