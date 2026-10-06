@@ -27,6 +27,8 @@ from .exceptions import (
     QuotaExceededError,
     RateLimitExceededError,
     RegistrationClosedError,
+    StudioModelError,
+    StudioNotConfiguredError,
 )
 
 _STATUS_MAP: dict[type[AgntSparkError], int] = {
@@ -45,6 +47,8 @@ _STATUS_MAP: dict[type[AgntSparkError], int] = {
     NotImplementedStubError: status.HTTP_501_NOT_IMPLEMENTED,
     BuildNotSupportedError: status.HTTP_501_NOT_IMPLEMENTED,
     DeploymentFailedError: status.HTTP_502_BAD_GATEWAY,
+    StudioNotConfiguredError: status.HTTP_503_SERVICE_UNAVAILABLE,
+    StudioModelError: status.HTTP_502_BAD_GATEWAY,
 }
 
 

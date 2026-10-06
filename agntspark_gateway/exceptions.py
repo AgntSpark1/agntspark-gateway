@@ -102,6 +102,9 @@ class QuotaExceededError(AgntSparkError):
         "memory_mb": "MB of memory across running replicas",
         "cpu_per_replica": "vCPUs per replica",
         "memory_mb_per_replica": "MB of memory per replica",
+        "assistants": "assistants",
+        "messages_month": "assistant replies a month",
+        "knowledge_chars": "characters of knowledge",
     }
 
     def __init__(
@@ -197,6 +200,45 @@ class DeploymentFailedError(AgntSparkError):
         )
 
 
+class AssistantNotFoundError(NotFoundError):
+    """Raised when an assistant doesn't exist, isn't the caller's, or isn't published."""
+
+    def __init__(self, assistant: str) -> None:
+        super().__init__("Assistant", details={"assistant": assistant})
+
+
+class ConversationNotFoundError(NotFoundError):
+    """Raised when a conversation id doesn't belong to the assistant asked about."""
+
+    def __init__(self, conversation_id: str) -> None:
+        super().__init__("Conversation", details={"conversation_id": conversation_id})
+
+
+class KnowledgeDocumentNotFoundError(NotFoundError):
+    def __init__(self, document_id: str) -> None:
+        super().__init__("Document", details={"document_id": document_id})
+
+
+class StudioNotConfiguredError(AgntSparkError):
+    """Raised when an assistant should reply but the platform has no model key."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Assistants can't reply yet: no model key is configured on this server.",
+            code="STUDIO_NOT_CONFIGURED",
+        )
+
+
+class StudioModelError(AgntSparkError):
+    """Raised when the model provider fails or returns nothing usable."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The assistant couldn't answer just now. Please try again.",
+            code="STUDIO_MODEL_ERROR",
+        )
+
+
 __all__ = [
     "AgntSparkError",
     "AuthenticationError",
@@ -218,4 +260,9 @@ __all__ = [
     "BillingNotConfiguredError",
     "BillingConflictError",
     "InvalidWebhookError",
+    "AssistantNotFoundError",
+    "ConversationNotFoundError",
+    "KnowledgeDocumentNotFoundError",
+    "StudioNotConfiguredError",
+    "StudioModelError",
 ]
