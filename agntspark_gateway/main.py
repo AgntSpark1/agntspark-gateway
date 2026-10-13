@@ -12,9 +12,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import runtime as rt
-from .config import settings
+from .config import production_config_problems, settings
 from .db import AsyncSessionLocal
 from .error_handlers import register_error_handlers
+from .observability import RequestContextMiddleware, configure_logging
 from .routers import account, admin, agents, api_keys, auth, billing, health, ingress
 from .scheduler import run_scheduler_loop
 from .services import metering_service
@@ -43,6 +44,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    problems = production_config_problems(settings)
+    if problems:
+        raise RuntimeError("Refusing to start in production: " + "; ".join(problems))
+    configure_logging(settings)
+
     app = FastAPI(
         title="AgntSpark Gateway",
         description="API Gateway + Auth service for the AgntSpark AI Agent hosting platform",
@@ -58,6 +64,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Outermost, so the request id covers CORS and error responses too.
+    app.add_middleware(RequestContextMiddleware)
     register_error_handlers(app)
 
     app.include_router(health.router)
