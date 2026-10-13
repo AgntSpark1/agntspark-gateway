@@ -68,6 +68,8 @@ services:
       AGNTSPARK_GATEWAY_STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       AGNTSPARK_GATEWAY_STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       AGNTSPARK_GATEWAY_STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      # Error reporting stays off until SENTRY_DSN is in .env.
+      AGNTSPARK_GATEWAY_SENTRY_DSN: ${SENTRY_DSN:-}
       AGNTSPARK_GATEWAY_PUBLIC_BASE_URL: https://${API_DOMAIN}
       # Trust X-Forwarded-For from Caddy so the login rate limiter keys on the
       # real client IP instead of the proxy's.

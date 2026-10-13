@@ -7,6 +7,7 @@ import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,11 +44,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             log.warning("shutdown: flushing request counts failed", error=str(exc))
 
 
+def init_error_reporting() -> bool:
+    """Send unhandled errors to Sentry when a DSN is configured."""
+    if not settings.sentry_dsn:
+        return False
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        # Request bodies hold passwords, tokens and agent secrets.
+        send_default_pii=False,
+        max_request_body_size="never",
+    )
+    return True
+
+
 def create_app() -> FastAPI:
     problems = production_config_problems(settings)
     if problems:
         raise RuntimeError("Refusing to start in production: " + "; ".join(problems))
     configure_logging(settings)
+    init_error_reporting()
 
     app = FastAPI(
         title="AgntSpark Gateway",

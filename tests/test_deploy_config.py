@@ -115,3 +115,11 @@ def test_caddy_address_is_the_one_isolation_allows() -> None:
     assert caddy_ip
     unit = (DEPLOY / "agntspark-isolate-agents.service").read_text()
     assert set(re.findall(r"-[sd] (\S+)", unit)) == {caddy_ip.group(1)}
+
+
+def test_readiness_is_reachable_at_the_edge_for_uptime_checks() -> None:
+    caddyfile = (DEPLOY / "Caddyfile").read_text()
+    assert "@health path /healthz /readyz" in caddyfile
+    workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+    assert "/readyz" in (workflows / "deploy.yml").read_text()
+    assert "/readyz" in (workflows / "uptime.yml").read_text()

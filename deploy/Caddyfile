@@ -48,7 +48,10 @@
 		import gateway
 	}
 
-	handle /healthz {
+	# Liveness, and readiness (the gateway can reach its database) for
+	# uptime checks and the deploy smoke test.
+	@health path /healthz /readyz
+	handle @health {
 		import gateway
 	}
 
