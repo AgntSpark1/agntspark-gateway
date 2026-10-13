@@ -1,0 +1,20 @@
+# Weekly dependency update PRs, so security fixes don't wait for someone to
+# remember. CI runs on each; nothing merges on its own.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
