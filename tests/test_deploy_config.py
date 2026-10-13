@@ -124,3 +124,11 @@ def test_backups_are_test_restored_and_report_failures() -> None:
     assert "trap 'ping /fail' ERR" in script
     # The archive only gets its final name after the restore check passed.
     assert script.index("pg_restore") < script.index('mv "$target.partial" "$target"')
+
+
+def test_readiness_is_reachable_at_the_edge_for_uptime_checks() -> None:
+    caddyfile = (DEPLOY / "Caddyfile").read_text()
+    assert "@health path /healthz /readyz" in caddyfile
+    workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+    assert "/readyz" in (workflows / "deploy.yml").read_text()
+    assert "/readyz" in (workflows / "uptime.yml").read_text()
