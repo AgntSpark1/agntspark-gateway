@@ -2,7 +2,7 @@
 # API Gateway + Auth service for the AgntSpark AI Agent hosting platform.
 # ─────────────────────────────────────────────────────────────────────
 
-FROM python:3.12-slim AS base
+FROM python:3.14-slim AS base
 
 LABEL org.opencontainers.image.title="AgntSpark Gateway"
 LABEL org.opencontainers.image.description="API Gateway + Auth service for the AgntSpark AI Agent hosting platform"
